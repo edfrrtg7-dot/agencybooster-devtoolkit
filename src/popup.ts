@@ -1,17 +1,28 @@
-const statusEl = document.getElementById("status");
+const bgEl = document.getElementById("bg-status")!;
+const contentEl = document.getElementById("content-status")!;
 
-chrome.runtime.sendMessage({ type: "TOOLKIT_STATUS" }, (response) => {
-  if (chrome.runtime.lastError) {
-    statusEl!.textContent = "Unable to connect to background service.";
+bgEl.textContent = "checking...";
+contentEl.textContent = "checking...";
+
+chrome.runtime.sendMessage({ type: "PING" }, (response) => {
+  if (chrome.runtime.lastError || !response || response.type !== "PONG") {
+    bgEl.textContent = "NOT RUNNING";
+    bgEl.className = "disconnected";
+    contentEl.textContent = "unknown";
+    contentEl.className = "disconnected";
     return;
   }
 
-  if (response?.payload) {
-    const modules = Object.entries(response.payload)
-      .map(([id, status]) => `${id}: ${status}`)
-      .join("\n");
-    statusEl!.textContent = modules;
-  } else {
-    statusEl!.textContent = "No status available.";
-  }
+  bgEl.textContent = "running";
+  bgEl.className = "connected";
+
+  chrome.runtime.sendMessage({ type: "PING_CONTENT" }, (resp) => {
+    if (chrome.runtime.lastError || !resp || resp.type !== "PONG" || resp.error) {
+      contentEl.textContent = "not connected";
+      contentEl.className = "disconnected";
+    } else {
+      contentEl.textContent = "connected";
+      contentEl.className = "connected";
+    }
+  });
 });
