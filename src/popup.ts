@@ -1,17 +1,11 @@
-const statusEl = document.getElementById("status");
+const statusEl = document.getElementById("status")!;
 
-chrome.runtime.sendMessage({ type: "TOOLKIT_STATUS" }, (response) => {
+statusEl.textContent = "Connecting...";
+
+chrome.runtime.sendMessage({ type: "PING" }, (response) => {
   if (chrome.runtime.lastError) {
-    statusEl!.textContent = "Unable to connect to background service.";
+    statusEl.textContent = "Background: unreachable";
     return;
   }
-
-  if (response?.payload) {
-    const modules = Object.entries(response.payload)
-      .map(([id, status]) => `${id}: ${status}`)
-      .join("\n");
-    statusEl!.textContent = modules;
-  } else {
-    statusEl!.textContent = "No status available.";
-  }
+  statusEl.textContent = `Background: ${response?.source === "background" ? "connected" : "error"}\nContent: ${response?.content?.source === "content" ? "connected" : "unreachable"}`;
 });

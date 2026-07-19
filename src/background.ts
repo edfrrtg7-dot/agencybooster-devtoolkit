@@ -1,40 +1,20 @@
-import { createToolkit } from "./core/bootstrap";
-
-const toolkit = createToolkit();
-
-toolkit.start().catch((err) => {
-  console.error("[AgencyBooster] Failed to start toolkit:", err);
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("[AgencyBooster] Extension installed");
 });
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener("message", (event) => {
-  const { type } = event.data;
-
-  switch (type) {
-    case "TOOLKIT_STATUS":
-      event.ports[0]?.postMessage({
-        type: "TOOLKIT_STATUS_RESPONSE",
-        payload: toolkit.moduleManager.getStatusMap(),
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "PING") {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      chrome.tabs.sendMessage(tabId, { type: "PING" }, (response) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ type: "PONG", source: "background", content: "error" });
+        } else {
+          sendResponse({ type: "PONG", source: "background", content: response });
+        }
       });
-      break;
-
-    case "TOOLKIT_STOP":
-      toolkit.stop();
-      break;
-
-    case "TOOLKIT_START":
-      toolkit.start();
-      break;
-
-    case "TOOLKIT_DESTROY":
-      toolkit.destroy();
-      break;
+      return true;
+    }
+    sendResponse({ type: "PONG", source: "background", content: "no-tab" });
   }
 });
