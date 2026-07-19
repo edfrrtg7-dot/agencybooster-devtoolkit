@@ -1,5 +1,3 @@
-export {};
-
 declare namespace chrome {
   namespace runtime {
     function sendMessage(
@@ -16,7 +14,9 @@ declare namespace chrome {
         ) => void
       ): void;
     };
-    function onInstalled.addListener(callback: () => void): void;
+    const onInstalled: {
+      addListener(callback: () => void): void;
+    };
   }
   namespace tabs {
     function sendMessage(

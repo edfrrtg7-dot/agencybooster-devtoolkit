@@ -7,5 +7,7 @@ chrome.runtime.sendMessage({ type: "PING" }, (response) => {
     statusEl.textContent = "Background: unreachable";
     return;
   }
-  statusEl.textContent = `Background: ${response?.source === "background" ? "connected" : "error"}\nContent: ${response?.content?.source === "content" ? "connected" : "unreachable"}`;
+  const res = response as Record<string, unknown> | null;
+  const content = res?.content as Record<string, unknown> | undefined;
+  statusEl.textContent = `Background: ${res?.source === "background" ? "connected" : "error"}\nContent: ${content?.source === "content" ? "connected" : "unreachable"}`;
 });
