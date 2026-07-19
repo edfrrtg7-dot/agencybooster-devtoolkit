@@ -1,4 +1,4 @@
-import type { ToolkitModule, ToolkitModuleContext, ModuleStatus } from "../interfaces/toolkit-module";
+import type { ToolkitModule, ToolkitModuleContext, ModuleStatus } from "./interfaces/toolkit-module";
 
 export class ContentScript {
   readonly id = "content-script";
