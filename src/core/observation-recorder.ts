@@ -12,10 +12,15 @@ export class ObservationRecorder {
   ) {}
 
   record(input: CreateObservationInput): Observation {
-    const observation = createObservation({
-      ...input,
-      sessionId: input.sessionId ?? this.sessionManager.getCurrentId(),
-    });
+    let sessionId = input.sessionId;
+    if (!sessionId) {
+      const currentId = this.sessionManager.getCurrentId();
+      if (currentId === "no-session") {
+        throw new Error("ObservationRecorder: no active session. Call sessionManager.start() first.");
+      }
+      sessionId = currentId;
+    }
+    const observation = createObservation({ ...input, sessionId });
     this.registry.add(observation);
     this.eventBus.emit(Events.ObservationRecorded, { observation });
     return observation;

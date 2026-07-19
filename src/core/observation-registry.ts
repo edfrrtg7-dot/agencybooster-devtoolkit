@@ -7,7 +7,7 @@ export class ObservationRegistry {
   constructor(private readonly eventBus: EventBus) {}
 
   add(observation: Observation): void {
-    this.observations.set(observation.id, observation);
+    this.observations.set(observation.id, Object.freeze(observation) as Observation);
   }
 
   remove(id: string): boolean {

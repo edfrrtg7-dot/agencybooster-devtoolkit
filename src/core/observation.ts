@@ -32,6 +32,16 @@ export interface CreateObservationInput {
   schemaVersion?: number;
 }
 
+function deepFreeze<T extends Record<string, unknown>>(obj: T): Readonly<T> {
+  Object.freeze(obj);
+  for (const value of Object.values(obj)) {
+    if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+      deepFreeze(value as Record<string, unknown>);
+    }
+  }
+  return obj;
+}
+
 export function createObservation(input: CreateObservationInput): Observation {
   const observation: Observation = {
     id: input.id ?? generateId(),
@@ -48,5 +58,5 @@ export function createObservation(input: CreateObservationInput): Observation {
     metadata: input.metadata,
   };
 
-  return Object.freeze(observation);
+  return deepFreeze(observation as unknown as Record<string, unknown>) as unknown as Observation;
 }
