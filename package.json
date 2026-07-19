@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "description": "AgencyBooster Developer Toolkit - Chrome Extension for development insights",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "tsc && node build.js",
+    "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },
   "devDependencies": {
+    "esbuild": "^0.21.0",
     "typescript": "^5.4.0"
   }
 }
