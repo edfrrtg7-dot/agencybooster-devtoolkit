@@ -1,40 +1,22 @@
-import { createToolkit } from "./core/bootstrap";
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === "PING") {
+    sendResponse({ type: "PONG" });
+  }
 
-const toolkit = createToolkit();
-
-toolkit.start().catch((err) => {
-  console.error("[AgencyBooster] Failed to start toolkit:", err);
-});
-
-self.addEventListener("install", () => {
-  self.skipWaiting();
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener("message", (event) => {
-  const { type } = event.data;
-
-  switch (type) {
-    case "TOOLKIT_STATUS":
-      event.ports[0]?.postMessage({
-        type: "TOOLKIT_STATUS_RESPONSE",
-        payload: toolkit.moduleManager.getStatusMap(),
+  if (message.type === "PING_CONTENT") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs[0]?.id) {
+        sendResponse({ type: "PONG", error: "no_active_tab" });
+        return;
+      }
+      chrome.tabs.sendMessage(tabs[0].id, { type: "PING" }, (response) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ type: "PONG", error: "content_script_unreachable" });
+        } else {
+          sendResponse(response);
+        }
       });
-      break;
-
-    case "TOOLKIT_STOP":
-      toolkit.stop();
-      break;
-
-    case "TOOLKIT_START":
-      toolkit.start();
-      break;
-
-    case "TOOLKIT_DESTROY":
-      toolkit.destroy();
-      break;
+    });
+    return true;
   }
 });

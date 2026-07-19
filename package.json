@@ -1,14 +1,15 @@
 {
   "name": "agencybooster-devtoolkit",
   "version": "0.1.0",
-  "description": "AgencyBooster Developer Toolkit - Chrome Extension for development insights",
+  "description": "AgencyBooster Developer Toolkit",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "tsc && node build.js",
-    "typecheck": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "esbuild": "^0.21.0",
     "typescript": "^5.4.0"
   }
 }
