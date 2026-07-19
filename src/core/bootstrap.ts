@@ -10,6 +10,7 @@ import { EventSpy } from "../modules/event-spy";
 import { Dashboard } from "../modules/dashboard";
 
 import type { ToolkitModule } from "../interfaces/toolkit-module";
+import type { ToolkitConfig } from "./config";
 
 export interface Toolkit {
   eventBus: EventBus;
@@ -21,7 +22,7 @@ export interface Toolkit {
   destroy(): Promise<void>;
 }
 
-export function createToolkit(configOverrides?: Partial<import("../core/config").ToolkitConfig>): Toolkit {
+export function createToolkit(configOverrides?: Partial<ToolkitConfig>): Toolkit {
   const eventBus = new EventBus();
   const logger = new Logger({ prefix: "AgencyBooster" });
   const config = new Config(configOverrides);

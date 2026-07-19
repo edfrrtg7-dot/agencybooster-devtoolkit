@@ -58,7 +58,10 @@ export class Config {
   }
 
   merge(overrides: Partial<ToolkitConfig>): void {
-    this.config = { ...this.config, ...overrides };
+    if (overrides.modules) {
+      this.config.modules = { ...this.config.modules, ...overrides.modules };
+    }
+    this.config = { ...this.config, ...overrides, modules: this.config.modules };
   }
 
   static fromJSON(json: string): Config {

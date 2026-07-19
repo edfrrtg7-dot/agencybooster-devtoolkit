@@ -1,3 +1,7 @@
+import type { EventBus } from "../core/event-bus";
+import type { Logger } from "../core/logger";
+import type { Config } from "../core/config";
+
 export interface ToolkitModuleContext {
   eventBus: EventBus;
   logger: Logger;
@@ -18,7 +22,3 @@ export interface ToolkitModule {
 }
 
 export type ModuleStatus = "idle" | "running" | "stopped" | "error";
-
-import type { EventBus } from "../core/event-bus";
-import type { Logger } from "../core/logger";
-import type { Config } from "../core/config";
