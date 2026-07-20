@@ -37,7 +37,7 @@ function registerAndStart(name: string, explorer: { start(): void; stop(): void 
 registerAndStart("Runtime Explorer", new RuntimeExplorer(recorder));
 registerAndStart("DOM Explorer", new DOMExplorer(recorder));
 registerAndStart("Storage Explorer", new StorageExplorer(recorder));
-registerAndStart("NetworkExplorer", new NetworkExplorer(recorder));
+registerAndStart("Network Explorer", new NetworkExplorer(recorder));
 
 function recordActivity(source: string) {
   const entry = explorerEntries.find((e) => e.name.includes(source.replace("Spy", "").replace("Inspector", "")));
@@ -159,6 +159,10 @@ function summarizeObs(obs: Observation): string {
     case "Network":
       return `${p.method} ${p.url}${p.status ? ` (${p.status})` : ""}`;
     case "Runtime":
+      if (obs.trigger === "navigation") return `Navigation: ${p.from ?? "?"} → ${p.to ?? "?"}`;
+      if (obs.trigger === "popstate") return `History change → ${p.url ?? "?"}`;
+      if (obs.trigger === "hashchange") return `Hash changed → ${p.newHash ?? "?"}`;
+      if (obs.trigger === "visibilitychange") return `Visibility: ${p.visibility ?? "?"}`;
       return "Runtime initialized";
     default:
       return obs.type;
