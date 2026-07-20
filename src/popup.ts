@@ -396,6 +396,51 @@ function setupLiveObsControls() {
   });
 }
 
+// --- Clipboard Buttons ---
+
+function setupClipboardButtons() {
+  document.getElementById("btn-copy-diag")!.addEventListener("click", async () => {
+    if (!cachedData) {
+      showToast("No data available yet");
+      return;
+    }
+    const text = formatDiagnostics(cachedData);
+    try {
+      const ok = await copyText(text);
+      if (ok) {
+        showToast("Diagnostics copied.");
+      } else {
+        showToast("Failed to copy — check clipboard permissions");
+        console.error("ABDT: clipboard write failed for diagnostics");
+      }
+    } catch (err) {
+      showToast("Clipboard error — see console");
+      console.error("ABDT: clipboard error during diagnostics copy", err);
+    }
+  });
+
+  document.getElementById("btn-copy-obs")!.addEventListener("click", async () => {
+    const obs = await sendMessage<RecentObsItem[]>({ type: "GET_RECENT_OBS" });
+    if (!obs || !obs.length) {
+      showToast("No observations to copy");
+      return;
+    }
+    const text = formatRecentObs(obs);
+    try {
+      const ok = await copyText(text);
+      if (ok) {
+        showToast("Recent observations copied.");
+      } else {
+        showToast("Failed to copy — check clipboard permissions");
+        console.error("ABDT: clipboard write failed for recent observations");
+      }
+    } catch (err) {
+      showToast("Clipboard error — see console");
+      console.error("ABDT: clipboard error during observations copy", err);
+    }
+  });
+}
+
 // --- Init ---
 
 async function poll() {
@@ -406,5 +451,6 @@ async function poll() {
 }
 
 setupLiveObsControls();
+setupClipboardButtons();
 poll();
 setInterval(poll, 2000);
