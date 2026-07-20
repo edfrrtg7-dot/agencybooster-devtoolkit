@@ -3,23 +3,259 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgencyBooster Developer Toolkit</title>
+  <title>AgencyBooster Diagnostics</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: 360px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
-      padding: 16px;
+      width: 420px;
+      min-height: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #c9d1d9;
+      font-size: 13px;
+      line-height: 1.5;
     }
-    h1 { font-size: 16px; color: #00d4ff; margin-bottom: 12px; }
-    .status { font-size: 12px; color: #888; }
+    .header { padding: 14px 16px; background: #161b22; border-bottom: 1px solid #30363d; }
+    .header h1 { font-size: 14px; font-weight: 600; color: #f0f6fc; margin: 0; }
+    .header .sub { font-size: 11px; color: #8b949e; margin-top: 2px; }
+    .section { padding: 12px 16px; border-bottom: 1px solid #21262d; }
+    .section:last-child { border-bottom: none; }
+    .section-title {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.5px; color: #8b949e; margin-bottom: 8px;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .stat-box {
+      background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 8px 10px;
+    }
+    .stat-box .label { font-size: 10px; color: #8b949e; margin-bottom: 2px; }
+    .stat-box .value { font-size: 16px; font-weight: 600; color: #58a6ff; }
+    .stat-box .value.sm { font-size: 12px; color: #c9d1d9; font-weight: 400; }
+    .explorer-card {
+      background: #161b22; border: 1px solid #21262d; border-radius: 6px;
+      padding: 8px 10px; margin-bottom: 4px;
+    }
+    .explorer-card:last-child { margin-bottom: 0; }
+    .explorer-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .health-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .health-dot.healthy { background: #3fb950; }
+    .health-dot.idle { background: #d29922; }
+    .health-dot.silent { background: #8b949e; }
+    .health-dot.error { background: #f85149; }
+    .explorer-name { font-weight: 600; font-size: 12px; color: #f0f6fc; }
+    .explorer-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; font-size: 11px; }
+    .explorer-meta .k { color: #8b949e; }
+    .explorer-meta .v { color: #c9d1d9; text-align: right; font-variant-numeric: tabular-nums; }
+    .explorer-meta .v.running { color: #3fb950; }
+    .explorer-meta .v.stopped { color: #f85149; }
+    .explorer-meta .v.rate { color: #58a6ff; font-weight: 600; }
+    .recorder-item { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
+    .recorder-item .k { color: #c9d1d9; }
+    .recorder-item .v { font-variant-numeric: tabular-nums; }
+    .recorder-item .v.ok { color: #3fb950; }
+    .recorder-item .v.err { color: #f85149; }
+    .btn-group { display: flex; gap: 6px; }
+    .btn {
+      flex: 1; padding: 7px 10px; font-size: 11px; font-weight: 500;
+      border: 1px solid #30363d; border-radius: 6px; background: #21262d;
+      color: #c9d1d9; cursor: pointer; text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn:hover { background: #30363d; border-color: #8b949e; }
+    .btn:active { background: #161b22; }
+    .toast {
+      position: fixed; bottom: 12px; left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      padding: 6px 14px; font-size: 11px; font-weight: 500;
+      color: #f0f6fc; background: #238636; border-radius: 6px;
+      opacity: 0; transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none; white-space: nowrap; z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .unavail { color: #484f58; font-style: italic; font-size: 12px; }
+    .obs-controls { display: flex; gap: 6px; margin-bottom: 6px; }
+    .btn.sm { padding: 4px 10px; font-size: 10px; }
+    .btn.active { background: #1f6feb; border-color: #1f6feb; color: #f0f6fc; }
+    .obs-list {
+      max-height: 220px; overflow-y: auto; border: 1px solid #21262d;
+      border-radius: 6px; background: #0d1117;
+    }
+    .obs-list::-webkit-scrollbar { width: 6px; }
+    .obs-list::-webkit-scrollbar-track { background: transparent; }
+    .obs-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    .obs-empty { padding: 16px; text-align: center; color: #484f58; font-size: 11px; }
+    .obs-item { padding: 6px 10px; border-bottom: 1px solid #161b22; }
+    .obs-item:last-child { border-bottom: none; }
+    .obs-ts { font-size: 10px; color: #484f58; font-family: monospace; }
+    .obs-source { font-size: 10px; color: #58a6ff; margin: 1px 0; }
+    .obs-summary { font-size: 11px; color: #c9d1d9; word-break: break-word; }
   </style>
 </head>
 <body>
-  <h1>AgencyBooster Toolkit</h1>
-  <div id="status" class="status">Loading...</div>
+  <div class="header">
+    <h1>AgencyBooster Toolkit</h1>
+    <div class="sub">Diagnostics</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Explorers</div>
+    <div id="explorers"><div class="unavail">Waiting for content script...</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Observations</div>
+    <div class="grid" id="obs-grid">
+      <div class="stat-box"><div class="label">Total</div><div class="value" id="obs-total">--</div></div>
+      <div class="stat-box"><div class="label">Current Rate</div><div class="value" id="obs-rate">--</div></div>
+      <div class="stat-box"><div class="label">Most Active</div><div class="value sm" id="obs-active">--</div></div>
+      <div class="stat-box"><div class="label">Last Observation</div><div class="value sm" id="obs-last">--</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Recorder</div>
+    <div id="recorder"><div class="unavail">Waiting for content script...</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Runtime</div>
+    <div class="grid" id="runtime-grid">
+      <div class="stat-box"><div class="label">Session</div><div class="value sm" id="rt-session">--</div></div>
+      <div class="stat-box"><div class="label">Visibility</div><div class="value sm" id="rt-visibility">--</div></div>
+      <div class="stat-box"><div class="label">Memory</div><div class="value sm" id="rt-memory">--</div></div>
+      <div class="stat-box"><div class="label">Diagnostics Updated</div><div class="value sm" id="rt-updated">--</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Live Observations</div>
+    <div class="obs-controls">
+      <button class="btn sm" id="btn-clear-obs">Clear View</button>
+      <button class="btn sm active" id="btn-auto-scroll">Auto Scroll</button>
+    </div>
+    <div class="obs-list" id="obs-list">
+      <div class="obs-empty">Waiting for observations...</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Developer Tools</div>
+    <div class="btn-group">
+      <button class="btn" id="btn-copy-diag">Copy Diagnostics</button>
+      <button class="btn" id="btn-copy-obs">Copy Recent Observations</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Sender State Snapshot</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-capture-snapshot">Capture Snapshot</button>
+      <button class="btn" id="btn-export-snapshot">Export Latest Snapshot</button>
+      <button class="btn" id="btn-export-history">Export Snapshot History</button>
+      <button class="btn" id="btn-compare-snapshots">Compare Last Two Snapshots</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Sender State</div>
+    <div class="grid" id="snapshot-grid">
+      <div class="stat-box"><div class="label">Latest Snapshot</div><div class="value sm" id="snap-latest">--</div></div>
+      <div class="stat-box"><div class="label">Snapshot Count</div><div class="value" id="snap-count">0</div></div>
+      <div class="stat-box"><div class="label">Storage Key</div><div class="value sm" id="snap-key">--</div></div>
+      <div class="stat-box"><div class="label">Object Size</div><div class="value sm" id="snap-size">--</div></div>
+      <div class="stat-box"><div class="label">Last Capture</div><div class="value sm" id="snap-capture">--</div></div>
+      <div class="stat-box"><div class="label">Diff Available</div><div class="value sm" id="snap-diff">No</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Runtime Investigation</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-run-investigation">Run Investigation</button>
+      <button class="btn" id="btn-export-investigation">Export Investigation Report</button>
+    </div>
+    <div class="grid" style="margin-top: 8px;" id="investigation-grid">
+      <div class="stat-box"><div class="label">Last Run</div><div class="value sm" id="inv-last">--</div></div>
+      <div class="stat-box"><div class="label">Duration</div><div class="value sm" id="inv-duration">--</div></div>
+      <div class="stat-box"><div class="label">Profile</div><div class="value sm" id="inv-profile">--</div></div>
+      <div class="stat-box"><div class="label">DOM Matches</div><div class="value" id="inv-dom">0</div></div>
+      <div class="stat-box"><div class="label">Runtime Matches</div><div class="value" id="inv-runtime">0</div></div>
+      <div class="stat-box"><div class="label">Storage Matches</div><div class="value" id="inv-storage">0</div></div>
+      <div class="stat-box"><div class="label">Relationships</div><div class="value" id="inv-relations">0</div></div>
+      <div class="stat-box"><div class="label">Report Size</div><div class="value sm" id="inv-size">--</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">DOM Anchor Trace</div>
+    <div class="grid" id="trace-grid">
+      <div class="stat-box"><div class="label">Anchors Found</div><div class="value" id="trace-anchors">0</div></div>
+      <div class="stat-box"><div class="label">Primary Anchor</div><div class="value sm" id="trace-primary">--</div></div>
+      <div class="stat-box"><div class="label">Runtime Paths</div><div class="value" id="trace-paths">0</div></div>
+      <div class="stat-box"><div class="label">Storage Correlations</div><div class="value" id="trace-correlations">0</div></div>
+      <div class="stat-box"><div class="label">High Confidence</div><div class="value" id="trace-high">0</div></div>
+      <div class="stat-box"><div class="label">Last Trace</div><div class="value sm" id="trace-time">--</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Storage Export</div>
+    <div class="grid" id="storage-export-grid">
+      <div class="stat-box"><div class="label">Entries Exported</div><div class="value" id="se-exported">0</div></div>
+      <div class="stat-box"><div class="label">Parsed JSON Objects</div><div class="value" id="se-parsed">0</div></div>
+      <div class="stat-box"><div class="label">Generated Schemas</div><div class="value" id="se-schemas">0</div></div>
+      <div class="stat-box"><div class="label">Truncated Objects</div><div class="value" id="se-truncated">0</div></div>
+      <div class="stat-box"><div class="label">Report Size</div><div class="value sm" id="se-report-size">--</div></div>
+      <div class="stat-box"><div class="label">Export Policy</div><div class="value sm" id="se-policy">--</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">State Diff</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-set-before">Set Before</button>
+      <button class="btn" id="btn-set-after">Set After</button>
+      <button class="btn" id="btn-run-diff">Run Diff</button>
+      <button class="btn" id="btn-export-diff">Export Diff Report</button>
+    </div>
+    <div class="grid" style="margin-top: 8px;" id="diff-grid">
+      <div class="stat-box"><div class="label">Has Before</div><div class="value sm" id="diff-before">No</div></div>
+      <div class="stat-box"><div class="label">Has After</div><div class="value sm" id="diff-after">No</div></div>
+      <div class="stat-box"><div class="label">Changes Detected</div><div class="value sm" id="diff-changes">No</div></div>
+      <div class="stat-box"><div class="label">DOM Changes</div><div class="value" id="diff-dom">0</div></div>
+      <div class="stat-box"><div class="label">Storage Changes</div><div class="value" id="diff-storage">0</div></div>
+      <div class="stat-box"><div class="label">Runtime Changes</div><div class="value" id="diff-runtime">0</div></div>
+      <div class="stat-box"><div class="label">Relationship Changes</div><div class="value" id="diff-relations">0</div></div>
+      <div class="stat-box"><div class="label">Trace Changes</div><div class="value" id="diff-trace">0</div></div>
+      <div class="stat-box"><div class="label">Noise Ignored</div><div class="value" id="diff-noise">0</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Semantic Analysis</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-run-semantic">Run Semantic Analysis</button>
+      <button class="btn" id="btn-export-semantic">Export Semantic Report</button>
+    </div>
+    <div class="grid" style="margin-top: 8px;" id="semantic-grid">
+      <div class="stat-box"><div class="label">Headline</div><div class="value sm" id="sem-headline">--</div></div>
+      <div class="stat-box"><div class="label">Semantic Events</div><div class="value" id="sem-events">0</div></div>
+      <div class="stat-box"><div class="label">Ignored Changes</div><div class="value" id="sem-ignored">0</div></div>
+      <div class="stat-box"><div class="label">Focused Containers</div><div class="value" id="sem-containers">0</div></div>
+      <div class="stat-box"><div class="label">Grouped DOM</div><div class="value" id="sem-grouped-dom">0</div></div>
+      <div class="stat-box"><div class="label">Storage Events</div><div class="value" id="sem-storage-events">0</div></div>
+      <div class="stat-box"><div class="label">Runtime Events</div><div class="value" id="sem-runtime-events">0</div></div>
+      <div class="stat-box"><div class="label">High Confidence</div><div class="value" id="sem-high">0</div></div>
+      <div class="stat-box"><div class="label">Medium Confidence</div><div class="value" id="sem-medium">0</div></div>
+      <div class="stat-box"><div class="label">Low Confidence</div><div class="value" id="sem-low">0</div></div>
+      <div class="stat-box"><div class="label">Analysis Duration</div><div class="value sm" id="sem-duration">--</div></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
   <script src="dist/popup.js" type="module"></script>
 </body>
 </html>

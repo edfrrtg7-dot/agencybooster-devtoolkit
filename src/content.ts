@@ -1,38 +1,517 @@
-import type { ToolkitModule, ToolkitModuleContext, ModuleStatus } from "../interfaces/toolkit-module";
+import { createPipeline } from "./setup";
+import { DOMExplorer } from "./explorers/dom";
+import { StorageExplorer } from "./explorers/storage";
+import { NetworkExplorer } from "./explorers/network";
+import { RuntimeExplorer } from "./explorers/runtime";
+import { StorageSnapshotService } from "./services";
+import { RuntimeInvestigator, getProfile } from "./services/investigation";
+import { diffReports } from "./services/investigation/diff-engine";
+import { analyzeSemantics } from "./services/investigation/semantic-engine";
+import { getPageInfo } from "./collectors";
+import { ObservationType, ObservationSource, Confidence } from "./core";
+import type { Observation, ObservationRegistry } from "./core";
 
-export class ContentScript {
-  readonly id = "content-script";
-  private ctx?: ToolkitModuleContext;
-  private status: ModuleStatus = "idle";
+const STORAGE_KEY_PREFIX = "chat-sender-";
 
-  async init(ctx: ToolkitModuleContext): Promise<void> {
-    this.ctx = ctx;
-    this.ctx.logger.debug("Content script initialized");
-  }
+const { sessionManager, recorder, registry } = createPipeline();
+const session = sessionManager.start();
 
-  async start(): Promise<void> {
-    this.status = "running";
-    this.ctx?.logger.info("Content script started");
-  }
+const keyUpdates = new Map<string, number>();
+const snapshotService = new StorageSnapshotService();
+const investigator = new RuntimeInvestigator();
+let lastInvestigationReport: ReturnType<typeof investigator.run> | null = null;
+let beforeReport: ReturnType<typeof investigator.run> | null = null;
+let afterReport: ReturnType<typeof investigator.run> | null = null;
+let lastDiffReport: ReturnType<typeof diffReports> | null = null;
+let lastSemanticReport: ReturnType<typeof analyzeSemantics> | null = null;
 
-  async stop(): Promise<void> {
-    this.status = "stopped";
-  }
+interface ExplorerEntry {
+  name: string;
+  running: boolean;
+  startedAt: number;
+  lastActivityAt: number | null;
+  totalObservations: number;
+  recentTimestamps: number[];
+}
 
-  async destroy(): Promise<void> {
-    this.status = "idle";
-    this.ctx = undefined;
-  }
+const explorerEntries: ExplorerEntry[] = [];
 
-  getStatus(): ModuleStatus {
-    return this.status;
+function registerAndStart(name: string, explorer: { start(): void; stop(): void }) {
+  const entry: ExplorerEntry = {
+    name,
+    running: false,
+    startedAt: Date.now(),
+    lastActivityAt: null,
+    totalObservations: 0,
+    recentTimestamps: [],
+  };
+  explorerEntries.push(entry);
+  explorer.start();
+  entry.running = true;
+  entry.startedAt = Date.now();
+}
+
+registerAndStart("Runtime Explorer", new RuntimeExplorer(recorder));
+registerAndStart("DOM Explorer", new DOMExplorer(recorder));
+registerAndStart("Storage Explorer", new StorageExplorer(recorder, keyUpdates));
+registerAndStart("Network Explorer", new NetworkExplorer(recorder));
+
+function recordActivity(source: string) {
+  const entry = explorerEntries.find((e) => e.name.includes(source.replace("Spy", "").replace("Inspector", "")));
+  if (!entry) return;
+  const now = Date.now();
+  entry.lastActivityAt = now;
+  entry.totalObservations++;
+  entry.recentTimestamps.push(now);
+  const cutoff = now - 10_000;
+  while (entry.recentTimestamps.length > 0 && entry.recentTimestamps[0] < cutoff) {
+    entry.recentTimestamps.shift();
   }
 }
 
-const content = new ContentScript();
+const originalRecord = recorder.record.bind(recorder);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(recorder as any).record = function (input: any) {
+  const obs = originalRecord(input);
+  recordActivity(obs.source);
+  return obs;
+};
+
+function pruneTimestamps() {
+  const cutoff = Date.now() - 10_000;
+  for (const entry of explorerEntries) {
+    while (entry.recentTimestamps.length > 0 && entry.recentTimestamps[0] < cutoff) {
+      entry.recentTimestamps.shift();
+    }
+  }
+}
+
+function computeRate(entry: ExplorerEntry): number {
+  const cutoff = Date.now() - 10_000;
+  const count = entry.recentTimestamps.filter((t) => t >= cutoff).length;
+  return count / 10;
+}
+
+function computeHealth(entry: ExplorerEntry): string {
+  if (!entry.running) return "error";
+  if (entry.totalObservations === 0) return "idle";
+  if (entry.lastActivityAt !== null && Date.now() - entry.lastActivityAt > 30_000) return "silent";
+  return "healthy";
+}
+
+function getExplorerStats() {
+  pruneTimestamps();
+  return explorerEntries.map((e) => ({
+    name: e.name,
+    running: e.running,
+    startedAt: e.startedAt,
+    lastActivityAt: e.lastActivityAt,
+    totalObservations: e.totalObservations,
+    rate: computeRate(e),
+    health: computeHealth(e),
+  }));
+}
+
+function getObsStats(reg: ObservationRegistry) {
+  const all = reg.getAll();
+  const perExplorer: Record<string, number> = {};
+  let lastTimestamp: number | null = null;
+  let maxCount = 0;
+  let mostActive = "";
+
+  for (const obs of all) {
+    const key = obs.source;
+    const count = (perExplorer[key] ?? 0) + 1;
+    perExplorer[key] = count;
+    if (count > maxCount) {
+      maxCount = count;
+      mostActive = key;
+    }
+    if (lastTimestamp === null || obs.timestamp > lastTimestamp) {
+      lastTimestamp = obs.timestamp;
+    }
+  }
+
+  pruneTimestamps();
+  let globalRate = 0;
+  for (const entry of explorerEntries) {
+    globalRate += computeRate(entry);
+  }
+
+  return { total: reg.count(), perExplorer, lastTimestamp, mostActive, globalRate };
+}
+
+function getRecentObs(reg: ObservationRegistry) {
+  return reg
+    .getAll()
+    .slice(-100)
+    .reverse()
+    .map((obs: Observation) => ({
+      timestamp: obs.timestamp,
+      source: obs.source,
+      type: obs.type,
+      summary: summarizeObs(obs),
+    }));
+}
+
+function summarizeObs(obs: Observation): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = obs.payload as any;
+  if (!p) return obs.type;
+
+  switch (obs.type) {
+    case "DOM":
+      if (p.mutationType === "childList") {
+        const parts: string[] = [];
+        if (p.addedCount) parts.push(`${p.addedCount} added`);
+        if (p.removedCount) parts.push(`${p.removedCount} removed`);
+        return `Element ${p.mutationType} (${parts.join(", ")}) <${p.targetTag}>`;
+      }
+      if (p.mutationType === "attributes") return `Attribute "${p.attributeName}" changed on <${p.targetTag}>`;
+      if (p.mutationType === "characterData") return `Text changed on <${p.targetTag}>`;
+      return `DOM ${p.mutationType}`;
+    case "Storage":
+      if (p.newValue === null) return `${p.storageType} removeItem "${p.key}"`;
+      return `${p.storageType} setItem "${p.key}"`;
+    case "Network":
+      return `${p.method} ${p.url}${p.status ? ` (${p.status})` : ""}`;
+    case "Runtime":
+      if (obs.trigger === "navigation") return `Navigation: ${p.from ?? "?"} → ${p.to ?? "?"}`;
+      if (obs.trigger === "popstate") return `History change → ${p.url ?? "?"}`;
+      if (obs.trigger === "hashchange") return `Hash changed → ${p.newHash ?? "?"}`;
+      if (obs.trigger === "visibilitychange") return `Visibility: ${p.visibility ?? "?"}`;
+      return "Runtime initialized";
+    case "Custom":
+      if (obs.trigger === "snapshot") return `Snapshot captured: "${p.storageKey}" (${p.size} bytes)`;
+      if (obs.trigger === "compare") return `Comparison: ${p.summary?.fieldsModified ?? 0} modified, ${p.summary?.fieldsAdded ?? 0} added, ${p.summary?.fieldsRemoved ?? 0} removed`;
+      if (obs.trigger === "investigate") return `Investigation [${p.profile}]: ${p.domMatches} DOM, ${p.runtimeMatches} runtime, ${p.storageMatches} storage, ${p.relationships} relationships`;
+      if (obs.trigger === "investigate-export") return `Investigation report exported (${p.reportSize} bytes)`;
+      return "Custom event";
+    default:
+      return obs.type;
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === "INJECT_SCRIPT") {
-    sendResponse({ status: "ok" });
+  if (message.type === "PING") {
+    sendResponse({ type: "PONG", source: "content" });
+    return;
+  }
+
+  if (message.type === "GET_DATA") {
+    sendResponse({
+      explorerStats: getExplorerStats(),
+      obsStats: getObsStats(registry),
+      recorderStatus: {
+        recorderInitialized: true,
+        eventBusConnected: true,
+        collectorInitialized: true,
+      },
+      runtimeInfo: {
+        extensionVersion: "0.1.0",
+        manifestVersion: 3,
+        userAgent: navigator.userAgent,
+        pageUrl: window.location.href,
+        sessionId: sessionManager.getCurrentId(),
+        sessionStartedAt: session.startedAt,
+      },
+    });
+    return;
+  }
+
+  if (message.type === "GET_RECENT_OBS") {
+    sendResponse(getRecentObs(registry));
+    return;
+  }
+
+  if (message.type === "CAPTURE_SNAPSHOT") {
+    try {
+      const key = snapshotService.findKey(STORAGE_KEY_PREFIX);
+      if (!key) {
+        sendResponse({ error: `No "${STORAGE_KEY_PREFIX}*" key found in localStorage` });
+        return;
+      }
+      const snapshot = snapshotService.capture(key, window.location.href);
+      recorder.record({
+        type: ObservationType.Custom,
+        source: ObservationSource.StorageInspector,
+        confidence: Confidence.Observed,
+        page: getPageInfo(),
+        trigger: "snapshot",
+        payload: { storageKey: snapshot.storageKey, size: snapshot.size, fieldCount: snapshot.fieldCount, snapshotId: snapshot.id },
+      });
+      sendResponse({ snapshot });
+    } catch (err) {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  if (message.type === "GET_SNAPSHOT_DATA") {
+    const latest = snapshotService.getLatest();
+    sendResponse({
+      snapshotCount: snapshotService.getCount(),
+      latestTimestamp: latest?.timestamp ?? null,
+      lastCaptureTime: latest?.timestamp ?? null,
+      storageKey: latest?.storageKey ?? null,
+      objectSize: latest?.size ?? null,
+      diffAvailable: snapshotService.hasDiff(),
+    });
+    return;
+  }
+
+  if (message.type === "EXPORT_LATEST_SNAPSHOT") {
+    sendResponse({ text: snapshotService.exportLatest() });
+    return;
+  }
+
+  if (message.type === "EXPORT_SNAPSHOT_HISTORY") {
+    sendResponse({ text: snapshotService.exportHistory() });
+    return;
+  }
+
+  if (message.type === "COMPARE_SNAPSHOTS") {
+    const result = snapshotService.compare();
+    if (!result) {
+      sendResponse({ error: "Need at least two snapshots to compare" });
+      return;
+    }
+    const report = snapshotService.exportComparison();
+    recorder.record({
+      type: ObservationType.Custom,
+      source: ObservationSource.Unknown,
+      confidence: Confidence.Derived,
+      page: getPageInfo(),
+      trigger: "compare",
+      payload: { summary: result.summary, identical: result.identical },
+    });
+    sendResponse({ text: report, summary: result.summary });
+    return;
+  }
+
+  if (message.type === "RUN_INVESTIGATION") {
+    const profileName = message.profile as string || "Finance";
+    const profile = getProfile(profileName);
+    try {
+      const report = investigator.run(profile, window.location.href);
+      lastInvestigationReport = report;
+      recorder.record({
+        type: ObservationType.Custom,
+        source: ObservationSource.Unknown,
+        confidence: Confidence.Observed,
+        page: getPageInfo(),
+        trigger: "investigate",
+        payload: {
+          profile: report.profile,
+          domMatches: report.summary.domMatches,
+          runtimeMatches: report.summary.runtimeMatches,
+          storageMatches: report.summary.storageMatches,
+          relationships: report.summary.relationships,
+          duration: report.duration,
+          truncated: report.truncated,
+        },
+      });
+      sendResponse({ report });
+    } catch (err) {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  if (message.type === "EXPORT_INVESTIGATION") {
+    if (!lastInvestigationReport) {
+      sendResponse({ error: "No investigation report available. Run an investigation first." });
+      return;
+    }
+    const text = JSON.stringify(lastInvestigationReport, null, 2);
+    recorder.record({
+      type: ObservationType.Custom,
+      source: ObservationSource.Unknown,
+      confidence: Confidence.Observed,
+      page: getPageInfo(),
+      trigger: "investigate-export",
+      payload: { profile: lastInvestigationReport.profile, reportSize: text.length },
+    });
+    sendResponse({ text });
+    return;
+  }
+
+  if (message.type === "GET_INVESTIGATION_DATA") {
+    const report = lastInvestigationReport;
+    const trace = report?.trace;
+    const completeness = report?.completeness;
+    const metadata = report?.metadata;
+    sendResponse({
+      lastRun: report?.timestamp ?? null,
+      duration: report?.duration ?? null,
+      profile: report?.profile ?? null,
+      domMatches: report?.summary.domMatches ?? 0,
+      runtimeMatches: report?.summary.runtimeMatches ?? 0,
+      storageMatches: report?.summary.storageMatches ?? 0,
+      relationships: report?.summary.relationships ?? 0,
+      reportSize: report ? JSON.stringify(report).length : 0,
+      traceAnchorCount: trace?.anchors.length ?? 0,
+      tracePrimaryAnchor: trace?.anchors[0]?.selector ?? null,
+      traceRuntimePaths: trace?.runtimePaths.length ?? 0,
+      traceStorageCorrelations: trace?.storageCorrelations.length ?? 0,
+      traceHighConfidence: trace?.confidenceSummary.high ?? 0,
+      traceLastTime: report?.timestamp ?? null,
+      storageExported: completeness?.exportedEntries ?? 0,
+      parsedJsonObjects: report?.enrichedStorage.filter((e) => e.metadata.isValidJson).length ?? 0,
+      generatedSchemas: report?.enrichedStorage.filter((e) => e.schema !== undefined).length ?? 0,
+      truncatedObjects: completeness?.truncatedEntries ?? 0,
+      exportPolicy: metadata?.exportPolicy ?? "smart",
+    });
+    return;
+  }
+
+  if (message.type === "SET_BEFORE_REPORT") {
+    beforeReport = lastInvestigationReport;
+    sendResponse({ hasBefore: beforeReport !== null });
+    return;
+  }
+
+  if (message.type === "SET_AFTER_REPORT") {
+    afterReport = lastInvestigationReport;
+    sendResponse({ hasAfter: afterReport !== null });
+    return;
+  }
+
+  if (message.type === "RUN_DIFF") {
+    if (!beforeReport || !afterReport) {
+      sendResponse({ error: "Need both before and after reports. Set both before running diff." });
+      return;
+    }
+    try {
+      lastDiffReport = diffReports(beforeReport, afterReport);
+      sendResponse({ report: lastDiffReport });
+    } catch (err) {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  if (message.type === "EXPORT_DIFF") {
+    if (!lastDiffReport) {
+      sendResponse({ error: "No diff report available. Run diff first." });
+      return;
+    }
+    const text = JSON.stringify(lastDiffReport, null, 2);
+    recorder.record({
+      type: ObservationType.Custom,
+      source: ObservationSource.Unknown,
+      confidence: Confidence.Derived,
+      page: getPageInfo(),
+      trigger: "diff-export",
+      payload: { reportSize: text.length, hasChanges: lastDiffReport.summary.hasChanges },
+    });
+    sendResponse({ text });
+    return;
+  }
+
+  if (message.type === "GET_DIFF_DATA") {
+    const diff = lastDiffReport;
+    sendResponse({
+      hasDiff: diff !== null,
+      hasChanges: diff?.summary.hasChanges ?? false,
+      domAdded: diff?.statistics.domAdded ?? 0,
+      domRemoved: diff?.statistics.domRemoved ?? 0,
+      domModified: diff?.statistics.domModified ?? 0,
+      storageChangedKeys: diff?.statistics.storageChangedKeys ?? 0,
+      storageChangedProperties: diff?.statistics.storageChangedProperties ?? 0,
+      runtimeChanged: diff?.statistics.runtimeChanged ?? 0,
+      relationshipAdded: diff?.statistics.relationshipAdded ?? 0,
+      relationshipRemoved: diff?.statistics.relationshipRemoved ?? 0,
+      relationshipModified: diff?.statistics.relationshipModified ?? 0,
+      traceChanges: diff?.statistics.traceChanges ?? 0,
+      noiseIgnored: diff?.statistics.noiseIgnored ?? 0,
+      hasBefore: beforeReport !== null,
+      hasAfter: afterReport !== null,
+    });
+    return;
+  }
+
+  if (message.type === "RUN_SEMANTIC") {
+    if (!lastDiffReport) {
+      sendResponse({ error: "No diff report available. Run diff first." });
+      return;
+    }
+    try {
+      const profileName = (message.profile as string) || lastDiffReport.afterProfile || "Generic";
+      const containers = (message.containers as string[]) || [];
+      lastSemanticReport = analyzeSemantics(lastDiffReport, profileName, containers);
+      recorder.record({
+        type: ObservationType.Custom,
+        source: ObservationSource.Unknown,
+        confidence: Confidence.Derived,
+        page: getPageInfo(),
+        trigger: "semantic-analysis",
+        payload: {
+          events: lastSemanticReport.statistics.semanticEvents,
+          ignored: lastSemanticReport.statistics.ignoredChanges,
+          duration: lastSemanticReport.duration,
+        },
+      });
+      sendResponse({ report: lastSemanticReport });
+    } catch (err) {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  if (message.type === "EXPORT_SEMANTIC") {
+    if (!lastSemanticReport) {
+      sendResponse({ error: "No semantic report available. Run semantic analysis first." });
+      return;
+    }
+    const format = (message.format as string) || "detailed";
+    let text: string;
+    if (format === "summary") {
+      const lines = [
+        `Semantic Analysis — ${lastSemanticReport.summary.headline}`,
+        "",
+        "Actions:",
+        ...lastSemanticReport.summary.actions.map((a) => `  - ${a}`),
+        "",
+        "Details:",
+        ...lastSemanticReport.summary.details.map((d) => `  - ${d}`),
+      ];
+      if (lastSemanticReport.summary.noiseIgnored.length > 0) {
+        lines.push("", "Noise ignored:");
+        lines.push(...lastSemanticReport.summary.noiseIgnored.map((n) => `  - ${n}`));
+      }
+      text = lines.join("\n");
+    } else {
+      text = JSON.stringify(lastSemanticReport, null, 2);
+    }
+    recorder.record({
+      type: ObservationType.Custom,
+      source: ObservationSource.Unknown,
+      confidence: Confidence.Derived,
+      page: getPageInfo(),
+      trigger: "semantic-export",
+      payload: { format, reportSize: text.length, events: lastSemanticReport.statistics.semanticEvents },
+    });
+    sendResponse({ text });
+    return;
+  }
+
+  if (message.type === "GET_SEMANTIC_DATA") {
+    const sr = lastSemanticReport;
+    sendResponse({
+      hasReport: sr !== null,
+      events: sr?.statistics.semanticEvents ?? 0,
+      ignored: sr?.statistics.ignoredChanges ?? 0,
+      focusedContainers: sr?.statistics.focusedContainers ?? 0,
+      groupedDom: sr?.statistics.groupedDomChanges ?? 0,
+      storageEvents: sr?.statistics.storageEvents ?? 0,
+      runtimeEvents: sr?.statistics.runtimeEvents ?? 0,
+      highConfidence: sr?.confidenceDistribution.high ?? 0,
+      mediumConfidence: sr?.confidenceDistribution.medium ?? 0,
+      lowConfidence: sr?.confidenceDistribution.low ?? 0,
+      analysisDuration: sr?.duration ?? 0,
+      headline: sr?.summary.headline ?? null,
+    });
+    return;
   }
 });
