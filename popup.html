@@ -170,6 +170,24 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Runtime Investigation</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-run-investigation">Run Investigation</button>
+      <button class="btn" id="btn-export-investigation">Export Investigation Report</button>
+    </div>
+    <div class="grid" style="margin-top: 8px;" id="investigation-grid">
+      <div class="stat-box"><div class="label">Last Run</div><div class="value sm" id="inv-last">--</div></div>
+      <div class="stat-box"><div class="label">Duration</div><div class="value sm" id="inv-duration">--</div></div>
+      <div class="stat-box"><div class="label">Profile</div><div class="value sm" id="inv-profile">--</div></div>
+      <div class="stat-box"><div class="label">DOM Matches</div><div class="value" id="inv-dom">0</div></div>
+      <div class="stat-box"><div class="label">Runtime Matches</div><div class="value" id="inv-runtime">0</div></div>
+      <div class="stat-box"><div class="label">Storage Matches</div><div class="value" id="inv-storage">0</div></div>
+      <div class="stat-box"><div class="label">Relationships</div><div class="value" id="inv-relations">0</div></div>
+      <div class="stat-box"><div class="label">Report Size</div><div class="value sm" id="inv-size">--</div></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="dist/popup.js" type="module"></script>

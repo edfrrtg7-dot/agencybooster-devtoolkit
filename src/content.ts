@@ -4,6 +4,7 @@ import { StorageExplorer } from "./explorers/storage";
 import { NetworkExplorer } from "./explorers/network";
 import { RuntimeExplorer } from "./explorers/runtime";
 import { StorageSnapshotService } from "./services";
+import { RuntimeInvestigator, getProfile } from "./services/investigation";
 import { getPageInfo } from "./collectors";
 import { ObservationType, ObservationSource, Confidence } from "./core";
 import type { Observation, ObservationRegistry } from "./core";
@@ -15,6 +16,8 @@ const session = sessionManager.start();
 
 const keyUpdates = new Map<string, number>();
 const snapshotService = new StorageSnapshotService();
+const investigator = new RuntimeInvestigator();
+let lastInvestigationReport: ReturnType<typeof investigator.run> | null = null;
 
 interface ExplorerEntry {
   name: string;
@@ -175,6 +178,8 @@ function summarizeObs(obs: Observation): string {
     case "Custom":
       if (obs.trigger === "snapshot") return `Snapshot captured: "${p.storageKey}" (${p.size} bytes)`;
       if (obs.trigger === "compare") return `Comparison: ${p.summary?.fieldsModified ?? 0} modified, ${p.summary?.fieldsAdded ?? 0} added, ${p.summary?.fieldsRemoved ?? 0} removed`;
+      if (obs.trigger === "investigate") return `Investigation [${p.profile}]: ${p.domMatches} DOM, ${p.runtimeMatches} runtime, ${p.storageMatches} storage`;
+      if (obs.trigger === "investigate-export") return `Investigation report exported (${p.reportSize} bytes)`;
       return "Custom event";
     default:
       return obs.type;
@@ -275,6 +280,68 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       payload: { summary: result.summary, identical: result.identical },
     });
     sendResponse({ text: report, summary: result.summary });
+    return;
+  }
+
+  if (message.type === "RUN_INVESTIGATION") {
+    const profileName = message.profile as string || "Finance";
+    const profile = getProfile(profileName);
+    try {
+      const report = investigator.run(profile, window.location.href);
+      lastInvestigationReport = report;
+      recorder.record({
+        type: ObservationType.Custom,
+        source: ObservationSource.Unknown,
+        confidence: Confidence.Observed,
+        page: getPageInfo(),
+        trigger: "investigate",
+        payload: {
+          profile: report.profile,
+          domMatches: report.summary.domMatches,
+          runtimeMatches: report.summary.runtimeMatches,
+          storageMatches: report.summary.storageMatches,
+          relationships: report.summary.relationships,
+          duration: report.duration,
+          truncated: report.truncated,
+        },
+      });
+      sendResponse({ report });
+    } catch (err) {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  if (message.type === "EXPORT_INVESTIGATION") {
+    if (!lastInvestigationReport) {
+      sendResponse({ error: "No investigation report available. Run an investigation first." });
+      return;
+    }
+    const text = JSON.stringify(lastInvestigationReport, null, 2);
+    recorder.record({
+      type: ObservationType.Custom,
+      source: ObservationSource.Unknown,
+      confidence: Confidence.Observed,
+      page: getPageInfo(),
+      trigger: "investigate-export",
+      payload: { profile: lastInvestigationReport.profile, reportSize: text.length },
+    });
+    sendResponse({ text });
+    return;
+  }
+
+  if (message.type === "GET_INVESTIGATION_DATA") {
+    const report = lastInvestigationReport;
+    sendResponse({
+      lastRun: report?.timestamp ?? null,
+      duration: report?.duration ?? null,
+      profile: report?.profile ?? null,
+      domMatches: report?.summary.domMatches ?? 0,
+      runtimeMatches: report?.summary.runtimeMatches ?? 0,
+      storageMatches: report?.summary.storageMatches ?? 0,
+      relationships: report?.summary.relationships ?? 0,
+      reportSize: report ? JSON.stringify(report).length : 0,
+    });
     return;
   }
 });

@@ -81,6 +81,38 @@ interface SnapshotCompareResult {
   error?: string;
 }
 
+interface InvestigationData {
+  lastRun: number | null;
+  duration: number | null;
+  profile: string | null;
+  domMatches: number;
+  runtimeMatches: number;
+  storageMatches: number;
+  relationships: number;
+  reportSize: number;
+}
+
+interface InvestigationRunResult {
+  report?: {
+    timestamp: number;
+    profile: string;
+    duration: number;
+    truncated: boolean;
+    summary: {
+      domMatches: number;
+      runtimeMatches: number;
+      storageMatches: number;
+      relationships: number;
+    };
+  };
+  error?: string;
+}
+
+interface InvestigationExportResult {
+  text?: string;
+  error?: string;
+}
+
 let cachedData: DiagnosticData | null = null;
 let autoScroll = true;
 let firstObsLoad = true;
@@ -553,6 +585,51 @@ function setupSnapshotButtons() {
   });
 }
 
+// --- Investigation UI ---
+
+function updateInvestigationStats(data: InvestigationData | null) {
+  if (!data) return;
+  setText("inv-last", data.lastRun ? tsFull(data.lastRun) : "--");
+  setText("inv-duration", data.duration !== null ? `${data.duration}ms` : "--");
+  setText("inv-profile", data.profile ?? "--");
+  setText("inv-dom", String(data.domMatches));
+  setText("inv-runtime", String(data.runtimeMatches));
+  setText("inv-storage", String(data.storageMatches));
+  setText("inv-relations", String(data.relationships));
+  setText("inv-size", data.reportSize > 0 ? `${Math.round(data.reportSize / 1024)}kb` : "--");
+}
+
+function setupInvestigationButtons() {
+  document.getElementById("btn-run-investigation")!.addEventListener("click", async () => {
+    const result = await sendMessage<InvestigationRunResult>({ type: "RUN_INVESTIGATION", profile: "Finance" });
+    if (result?.error) {
+      showToast(result.error);
+      return;
+    }
+    if (result?.report) {
+      const s = result.report.summary;
+      showToast(`Investigation complete: ${s.domMatches} DOM, ${s.runtimeMatches} runtime, ${s.storageMatches} storage`);
+    }
+  });
+
+  document.getElementById("btn-export-investigation")!.addEventListener("click", async () => {
+    const result = await sendMessage<InvestigationExportResult>({ type: "EXPORT_INVESTIGATION" });
+    if (result?.error) {
+      showToast(result.error);
+      return;
+    }
+    if (result?.text) {
+      try {
+        const ok = await copyText(result.text);
+        showToast(ok ? "Investigation report copied." : "Failed to copy — check clipboard permissions");
+      } catch (err) {
+        showToast("Clipboard error — see console");
+        console.error("ABDT: clipboard error during investigation export", err);
+      }
+    }
+  });
+}
+
 // --- Init ---
 
 async function poll() {
@@ -562,10 +639,13 @@ async function poll() {
   if (obs) updateLiveObs(obs);
   const snapData = await sendMessage<SnapshotData>({ type: "GET_SNAPSHOT_DATA" });
   updateSnapshotStats(snapData);
+  const invData = await sendMessage<InvestigationData>({ type: "GET_INVESTIGATION_DATA" });
+  updateInvestigationStats(invData);
 }
 
 setupLiveObsControls();
 setupClipboardButtons();
 setupSnapshotButtons();
+setupInvestigationButtons();
 poll();
 setInterval(poll, 2000);
