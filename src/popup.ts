@@ -46,6 +46,10 @@ interface RecentObsItem {
 }
 
 let cachedData: DiagnosticData | null = null;
+let autoScroll = true;
+let firstObsLoad = true;
+const seenObs = new Set<string>();
+const MAX_VISIBLE = 100;
 
 // --- Data Fetching ---
 
@@ -295,27 +299,112 @@ function formatRecentObs(observations: RecentObsItem[]): string {
   return lines.join("\n");
 }
 
+// --- Live Observations ---
+
+function updateLiveObs(observations: RecentObsItem[]) {
+  const list = document.getElementById("obs-list")!;
+  const empty = list.querySelector(".obs-empty");
+
+  if (firstObsLoad) {
+    firstObsLoad = false;
+    list.innerHTML = "";
+    if (!observations.length) {
+      list.innerHTML = '<div class="obs-empty">No observations yet.</div>';
+      return;
+    }
+    for (let i = observations.length - 1; i >= 0; i--) {
+      list.appendChild(createObsEl(observations[i]));
+      seenObs.add(obsKey(observations[i]));
+    }
+    trimObsList(list);
+    if (autoScroll) list.scrollTop = 0;
+    return;
+  }
+
+  let added = 0;
+  for (let i = observations.length - 1; i >= 0; i--) {
+    const obs = observations[i];
+    const key = obsKey(obs);
+    if (seenObs.has(key)) continue;
+    seenObs.add(key);
+    const el = createObsEl(obs);
+    if (list.firstChild && !list.querySelector(".obs-empty")) {
+      list.insertBefore(el, list.firstChild);
+    } else {
+      list.innerHTML = "";
+      list.appendChild(el);
+    }
+    added++;
+  }
+
+  if (added > 0) {
+    trimObsList(list);
+    if (autoScroll) list.scrollTop = 0;
+  }
+}
+
+function createObsEl(obs: RecentObsItem): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "obs-item";
+  el.innerHTML = `<div class="obs-ts">${tsShort(obs.timestamp)}</div><div class="obs-source">${sourceToName(obs.source)}</div><div class="obs-summary">${escapeHtml(obs.summary)}</div>`;
+  return el;
+}
+
+function obsKey(obs: RecentObsItem): string {
+  return `${obs.timestamp}:${obs.source}:${obs.type}:${obs.summary}`;
+}
+
+function trimObsList(list: HTMLElement) {
+  while (list.children.length > MAX_VISIBLE) {
+    const last = list.lastElementChild;
+    if (last) {
+      seenObs.delete(itemKey(last));
+      list.removeChild(last);
+    }
+  }
+}
+
+function itemKey(el: Element): string {
+  const ts = el.querySelector(".obs-ts")?.textContent ?? "";
+  const src = el.querySelector(".obs-source")?.textContent ?? "";
+  const sum = el.querySelector(".obs-summary")?.textContent ?? "";
+  return `${ts}:${src}:${sum}`;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function clearLiveObs() {
+  const list = document.getElementById("obs-list")!;
+  list.innerHTML = '<div class="obs-empty">View cleared.</div>';
+  seenObs.clear();
+  firstObsLoad = true;
+}
+
+function setupLiveObsControls() {
+  document.getElementById("btn-clear-obs")!.addEventListener("click", clearLiveObs);
+
+  const btn = document.getElementById("btn-auto-scroll")!;
+  btn.addEventListener("click", () => {
+    autoScroll = !autoScroll;
+    btn.classList.toggle("active", autoScroll);
+  });
+}
+
 // --- Init ---
 
 async function poll() {
   const data = await sendMessage<DiagnosticData>({ type: "GET_DATA" });
   updateAll(data);
+  const obs = await sendMessage<RecentObsItem[]>({ type: "GET_RECENT_OBS" });
+  if (obs) updateLiveObs(obs);
 }
 
-document.getElementById("btn-copy-diag")!.addEventListener("click", async () => {
-  if (!cachedData) {
-    showToast("No data available yet.");
-    return;
-  }
-  await copyText(formatDiagnostics(cachedData));
-  showToast("Diagnostics copied.");
-});
-
-document.getElementById("btn-copy-obs")!.addEventListener("click", async () => {
-  const observations = await sendMessage<RecentObsItem[]>({ type: "GET_RECENT_OBS" });
-  await copyText(formatRecentObs(observations ?? []));
-  showToast("Recent observations copied.");
-});
-
+setupLiveObsControls();
 poll();
 setInterval(poll, 2000);

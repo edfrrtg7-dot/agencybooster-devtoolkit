@@ -75,6 +75,22 @@
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .unavail { color: #484f58; font-style: italic; font-size: 12px; }
+    .obs-controls { display: flex; gap: 6px; margin-bottom: 6px; }
+    .btn.sm { padding: 4px 10px; font-size: 10px; }
+    .btn.active { background: #1f6feb; border-color: #1f6feb; color: #f0f6fc; }
+    .obs-list {
+      max-height: 220px; overflow-y: auto; border: 1px solid #21262d;
+      border-radius: 6px; background: #0d1117;
+    }
+    .obs-list::-webkit-scrollbar { width: 6px; }
+    .obs-list::-webkit-scrollbar-track { background: transparent; }
+    .obs-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    .obs-empty { padding: 16px; text-align: center; color: #484f58; font-size: 11px; }
+    .obs-item { padding: 6px 10px; border-bottom: 1px solid #161b22; }
+    .obs-item:last-child { border-bottom: none; }
+    .obs-ts { font-size: 10px; color: #484f58; font-family: monospace; }
+    .obs-source { font-size: 10px; color: #58a6ff; margin: 1px 0; }
+    .obs-summary { font-size: 11px; color: #c9d1d9; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -110,6 +126,17 @@
       <div class="stat-box"><div class="label">Visibility</div><div class="value sm" id="rt-visibility">--</div></div>
       <div class="stat-box"><div class="label">Memory</div><div class="value sm" id="rt-memory">--</div></div>
       <div class="stat-box"><div class="label">Diagnostics Updated</div><div class="value sm" id="rt-updated">--</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Live Observations</div>
+    <div class="obs-controls">
+      <button class="btn sm" id="btn-clear-obs">Clear View</button>
+      <button class="btn sm active" id="btn-auto-scroll">Auto Scroll</button>
+    </div>
+    <div class="obs-list" id="obs-list">
+      <div class="obs-empty">Waiting for observations...</div>
     </div>
   </div>
 
