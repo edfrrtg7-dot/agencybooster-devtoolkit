@@ -14,7 +14,7 @@ const { sessionManager, recorder, registry } = createPipeline();
 const session = sessionManager.start();
 
 const keyUpdates = new Map<string, number>();
-const snapshotService = new StorageSnapshotService(keyUpdates);
+const snapshotService = new StorageSnapshotService();
 
 interface ExplorerEntry {
   name: string;

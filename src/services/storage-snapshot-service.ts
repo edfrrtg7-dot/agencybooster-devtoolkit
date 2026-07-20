@@ -46,26 +46,22 @@ function countFields(value: unknown): number {
 export class StorageSnapshotService {
   private history: StorageSnapshot[] = [];
 
-  constructor(private readonly keyUpdates: Map<string, number>) {}
-
   findKey(prefix: string): string | null {
-    const matches: Array<{ key: string; lastUpdate: number }> = [];
+    const activeKeys: string[] = [];
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith(prefix)) {
-        matches.push({ key, lastUpdate: this.keyUpdates.get(key) ?? 0 });
+      if (key && key.startsWith(prefix) && !key.includes("-backup-")) {
+        activeKeys.push(key);
       }
     }
 
-    if (matches.length === 0) return null;
-    if (matches.length === 1) return matches[0].key;
+    if (activeKeys.length === 0) return null;
+    if (activeKeys.length === 1) return activeKeys[0];
 
-    matches.sort((a, b) => b.lastUpdate - a.lastUpdate);
-
-    if (matches[0].lastUpdate === 0) return null;
-
-    return matches[0].key;
+    throw new Error(
+      `Multiple active sender keys found: ${activeKeys.join(", ")}. Cannot determine which to snapshot.`
+    );
   }
 
   capture(key: string, pageUrl: string): StorageSnapshot {
