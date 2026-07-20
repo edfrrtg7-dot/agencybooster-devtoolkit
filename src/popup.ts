@@ -45,6 +45,42 @@ interface RecentObsItem {
   summary: string;
 }
 
+interface SnapshotData {
+  snapshotCount: number;
+  latestTimestamp: number | null;
+  lastCaptureTime: number | null;
+  storageKey: string | null;
+  objectSize: number | null;
+  diffAvailable: boolean;
+}
+
+interface SnapshotCaptureResult {
+  snapshot?: {
+    id: string;
+    timestamp: number;
+    storageKey: string;
+    size: number;
+    fieldCount: number;
+  };
+  error?: string;
+}
+
+interface SnapshotExportResult {
+  text?: string;
+  error?: string;
+}
+
+interface SnapshotCompareResult {
+  text?: string;
+  summary?: {
+    fieldsAdded: number;
+    fieldsRemoved: number;
+    fieldsModified: number;
+    arraysModified: number;
+  };
+  error?: string;
+}
+
 let cachedData: DiagnosticData | null = null;
 let autoScroll = true;
 let firstObsLoad = true;
@@ -441,6 +477,82 @@ function setupClipboardButtons() {
   });
 }
 
+// --- Snapshot UI ---
+
+function updateSnapshotStats(data: SnapshotData | null) {
+  if (!data) return;
+  setText("snap-latest", data.latestTimestamp ? tsFull(data.latestTimestamp) : "--");
+  setText("snap-count", String(data.snapshotCount));
+  setText("snap-key", data.storageKey ?? "--");
+  setText("snap-size", data.objectSize !== null ? `${data.objectSize} bytes` : "--");
+  setText("snap-capture", data.lastCaptureTime ? fmtTime(data.lastCaptureTime) : "--");
+  setText("snap-diff", data.diffAvailable ? "Yes" : "No");
+}
+
+function setupSnapshotButtons() {
+  document.getElementById("btn-capture-snapshot")!.addEventListener("click", async () => {
+    const result = await sendMessage<SnapshotCaptureResult>({ type: "CAPTURE_SNAPSHOT" });
+    if (result?.error) {
+      showToast(result.error);
+      return;
+    }
+    if (result?.snapshot) {
+      showToast(`Snapshot captured: ${result.snapshot.storageKey} (${result.snapshot.size} bytes)`);
+    }
+  });
+
+  document.getElementById("btn-export-snapshot")!.addEventListener("click", async () => {
+    const result = await sendMessage<SnapshotExportResult>({ type: "EXPORT_LATEST_SNAPSHOT" });
+    if (result?.error) {
+      showToast(result.error);
+      return;
+    }
+    if (result?.text) {
+      try {
+        const ok = await copyText(result.text);
+        showToast(ok ? "Latest snapshot copied." : "Failed to copy — check clipboard permissions");
+      } catch (err) {
+        showToast("Clipboard error — see console");
+        console.error("ABDT: clipboard error during snapshot export", err);
+      }
+    }
+  });
+
+  document.getElementById("btn-export-history")!.addEventListener("click", async () => {
+    const result = await sendMessage<SnapshotExportResult>({ type: "EXPORT_SNAPSHOT_HISTORY" });
+    if (result?.error) {
+      showToast(result.error);
+      return;
+    }
+    if (result?.text) {
+      try {
+        const ok = await copyText(result.text);
+        showToast(ok ? "Snapshot history copied." : "Failed to copy — check clipboard permissions");
+      } catch (err) {
+        showToast("Clipboard error — see console");
+        console.error("ABDT: clipboard error during history export", err);
+      }
+    }
+  });
+
+  document.getElementById("btn-compare-snapshots")!.addEventListener("click", async () => {
+    const result = await sendMessage<SnapshotCompareResult>({ type: "COMPARE_SNAPSHOTS" });
+    if (result?.error) {
+      showToast(result.error);
+      return;
+    }
+    if (result?.text) {
+      try {
+        const ok = await copyText(result.text);
+        showToast(ok ? "Comparison copied." : "Failed to copy — check clipboard permissions");
+      } catch (err) {
+        showToast("Clipboard error — see console");
+        console.error("ABDT: clipboard error during comparison export", err);
+      }
+    }
+  });
+}
+
 // --- Init ---
 
 async function poll() {
@@ -448,9 +560,12 @@ async function poll() {
   updateAll(data);
   const obs = await sendMessage<RecentObsItem[]>({ type: "GET_RECENT_OBS" });
   if (obs) updateLiveObs(obs);
+  const snapData = await sendMessage<SnapshotData>({ type: "GET_SNAPSHOT_DATA" });
+  updateSnapshotStats(snapData);
 }
 
 setupLiveObsControls();
 setupClipboardButtons();
+setupSnapshotButtons();
 poll();
 setInterval(poll, 2000);

@@ -148,6 +148,28 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Sender State Snapshot</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-capture-snapshot">Capture Snapshot</button>
+      <button class="btn" id="btn-export-snapshot">Export Latest Snapshot</button>
+      <button class="btn" id="btn-export-history">Export Snapshot History</button>
+      <button class="btn" id="btn-compare-snapshots">Compare Last Two Snapshots</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Sender State</div>
+    <div class="grid" id="snapshot-grid">
+      <div class="stat-box"><div class="label">Latest Snapshot</div><div class="value sm" id="snap-latest">--</div></div>
+      <div class="stat-box"><div class="label">Snapshot Count</div><div class="value" id="snap-count">0</div></div>
+      <div class="stat-box"><div class="label">Storage Key</div><div class="value sm" id="snap-key">--</div></div>
+      <div class="stat-box"><div class="label">Object Size</div><div class="value sm" id="snap-size">--</div></div>
+      <div class="stat-box"><div class="label">Last Capture</div><div class="value sm" id="snap-capture">--</div></div>
+      <div class="stat-box"><div class="label">Diff Available</div><div class="value sm" id="snap-diff">No</div></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="dist/popup.js" type="module"></script>

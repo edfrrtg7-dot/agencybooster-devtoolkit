@@ -44,4 +44,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  const snapshotTypes = ["CAPTURE_SNAPSHOT", "GET_SNAPSHOT_DATA", "EXPORT_LATEST_SNAPSHOT", "EXPORT_SNAPSHOT_HISTORY", "COMPARE_SNAPSHOTS"];
+  if (snapshotTypes.includes(message.type as string)) {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      const tabId = tabs[0]?.id;
+      if (!tabId) {
+        sendResponse(null);
+        return;
+      }
+      const data = await queryContent(tabId, { type: message.type });
+      sendResponse(data);
+    });
+    return true;
+  }
 });

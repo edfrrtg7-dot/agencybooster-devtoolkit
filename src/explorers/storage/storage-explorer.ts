@@ -46,7 +46,10 @@ export class StorageExplorer {
   private readonly originalSetItem: (key: string, value: string) => void;
   private readonly originalRemoveItem: (key: string) => void;
 
-  constructor(private readonly recorder: ObservationRecorder) {
+  constructor(
+    private readonly recorder: ObservationRecorder,
+    private readonly keyUpdates?: Map<string, number>,
+  ) {
     this.originalSetItem = Storage.prototype.setItem;
     this.originalRemoveItem = Storage.prototype.removeItem;
   }
@@ -58,10 +61,14 @@ export class StorageExplorer {
     const recorder = this.recorder;
     const origSetItem = this.originalSetItem;
     const origRemoveItem = this.originalRemoveItem;
+    const keyUpdates = this.keyUpdates;
 
     Storage.prototype.setItem = function (this: Storage, key: string, value: string) {
       try {
         const oldValue = this.getItem(key);
+        if (keyUpdates && this === window.localStorage) {
+          keyUpdates.set(key, Date.now());
+        }
         recorder.record(
           collectStorageChange({
             storageType:
