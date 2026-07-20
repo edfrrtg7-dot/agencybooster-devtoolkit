@@ -59,7 +59,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  const investigationTypes = ["RUN_INVESTIGATION", "EXPORT_INVESTIGATION", "GET_INVESTIGATION_DATA"];
+  const investigationTypes = ["RUN_INVESTIGATION", "EXPORT_INVESTIGATION", "GET_INVESTIGATION_DATA", "SET_BEFORE_REPORT", "SET_AFTER_REPORT", "RUN_DIFF", "EXPORT_DIFF", "GET_DIFF_DATA"];
   if (investigationTypes.includes(message.type as string)) {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       const tabId = tabs[0]?.id;
