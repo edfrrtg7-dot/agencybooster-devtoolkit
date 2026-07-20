@@ -4,6 +4,7 @@ import type {
   InvestigationReport,
   TraceReport,
   ConfidenceSummary,
+  EnrichedStorageEntry,
 } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { investigateDOM } from "./dom-module";
@@ -14,6 +15,35 @@ import { selectAnchors } from "./anchor-selector";
 import { traceRuntime } from "./runtime-trace";
 import { correlateStorage } from "./storage-correlation";
 import { buildTraceRelationships, classifyConfidence } from "./trace-confidence";
+import { enrichStorageEntry, buildCompleteness, buildInvestigationMetadata } from "./storage-export";
+
+function buildEnrichedStorage(
+  storageMatches: Array<{ storageType: "localStorage" | "sessionStorage"; key: string }>,
+  config: InvestigationConfig,
+): EnrichedStorageEntry[] {
+  const enriched: EnrichedStorageEntry[] = [];
+
+  for (const match of storageMatches) {
+    let raw: string;
+    try {
+      const store = match.storageType === "localStorage" ? localStorage : sessionStorage;
+      raw = store.getItem(match.key) ?? "";
+    } catch {
+      continue;
+    }
+
+    const entry = enrichStorageEntry(
+      match.storageType,
+      match.key,
+      raw,
+      config.exportLimits,
+      config.exportPolicy,
+    );
+    enriched.push(entry);
+  }
+
+  return enriched;
+}
 
 export class RuntimeInvestigator {
   private config: InvestigationConfig;
@@ -118,27 +148,40 @@ export class RuntimeInvestigator {
     }
 
     const allRelationships = [...relationships, ...trace.relationships];
-    const totalSummary: ConfidenceSummary = {
-      high: classifyConfidence(allRelationships).high,
-      medium: classifyConfidence(allRelationships).medium,
-      low: classifyConfidence(allRelationships).low,
-      unverified: classifyConfidence(allRelationships).unverified,
-    };
+
+    const enrichedStorage = profile.enabledModules.includes("storage")
+      ? buildEnrichedStorage(
+          storageResult.matches.map((m) => ({ storageType: m.storageType, key: m.key })),
+          this.config,
+        )
+      : [];
+
+    const completeness = buildCompleteness(enrichedStorage, storageResult.matches.length);
+
+    const duration = performance.now() - start;
+
+    const metadata = buildInvestigationMetadata(
+      this.config.exportPolicy,
+      duration,
+      pageUrl,
+      profile.name,
+    );
 
     const reportSize = JSON.stringify({
       dom: domResult.matches,
       runtimeObjects: runtimeResult.matches,
       storage: storageResult.matches,
-      relationships,
+      relationships: allRelationships,
       trace,
+      enrichedStorage,
+      completeness,
+      metadata,
     }).length;
 
     if (reportSize > this.config.maxReportSize) {
       truncated = true;
       truncationReason += `Report size (${reportSize}) exceeds limit. `;
     }
-
-    const duration = performance.now() - start;
 
     return {
       timestamp: Date.now(),
@@ -158,6 +201,9 @@ export class RuntimeInvestigator {
       storage: storageResult.matches,
       relationships: allRelationships,
       trace,
+      enrichedStorage,
+      completeness,
+      metadata,
     };
   }
 }

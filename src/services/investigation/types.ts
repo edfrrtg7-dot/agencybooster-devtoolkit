@@ -1,8 +1,28 @@
+export type ExportPolicyType = "smart" | "full";
+
+export interface ExportLimits {
+  readonly maxJsonSize: number;
+  readonly maxRecursionDepth: number;
+  readonly maxObjectProperties: number;
+  readonly maxArrayElements: number;
+  readonly maxStringLength: number;
+}
+
+export const DEFAULT_EXPORT_LIMITS: ExportLimits = {
+  maxJsonSize: 500_000,
+  maxRecursionDepth: 8,
+  maxObjectProperties: 200,
+  maxArrayElements: 100,
+  maxStringLength: 10_000,
+};
+
 export interface InvestigationConfig {
   readonly maxRecursionDepth: number;
   readonly maxObjects: number;
   readonly maxProperties: number;
   readonly maxReportSize: number;
+  readonly exportPolicy: ExportPolicyType;
+  readonly exportLimits: ExportLimits;
 }
 
 export const DEFAULT_CONFIG: InvestigationConfig = {
@@ -10,6 +30,8 @@ export const DEFAULT_CONFIG: InvestigationConfig = {
   maxObjects: 200,
   maxProperties: 50,
   maxReportSize: 100_000,
+  exportPolicy: "smart",
+  exportLimits: DEFAULT_EXPORT_LIMITS,
 };
 
 export interface InvestigationProfile {
@@ -112,6 +134,77 @@ export interface TraceReport {
   readonly confidenceSummary: ConfidenceSummary;
 }
 
+export interface StorageMetadata {
+  readonly storageType: "localStorage" | "sessionStorage";
+  readonly key: string;
+  readonly valueType: string;
+  readonly rawSize: number;
+  readonly parsedSize: number;
+  readonly isValidJson: boolean;
+  readonly rootType: string;
+  readonly topLevelPropertyCount: number;
+}
+
+export interface TruncationInfo {
+  readonly path: string;
+  readonly reason: string;
+  readonly omittedBytes: number;
+  readonly originalSize: number;
+  readonly exportedSize: number;
+}
+
+export interface SchemaSummary {
+  readonly rootType: string;
+  readonly properties: Readonly<Record<string, string>>;
+  readonly arrayItemSchema?: Readonly<Record<string, string>>;
+}
+
+export interface ObjectTreeNode {
+  readonly name: string;
+  readonly type: string;
+  readonly childCount: number;
+  readonly children: readonly ObjectTreeNode[];
+}
+
+export interface ObjectStatistics {
+  readonly objectCount: number;
+  readonly arrayCount: number;
+  readonly primitiveCount: number;
+  readonly stringCount: number;
+  readonly numberCount: number;
+  readonly booleanCount: number;
+  readonly nullCount: number;
+  readonly maxDepth: number;
+}
+
+export interface EnrichedStorageEntry {
+  readonly metadata: StorageMetadata;
+  readonly exportedData: unknown;
+  readonly schema?: SchemaSummary;
+  readonly tree?: ObjectTreeNode;
+  readonly statistics?: ObjectStatistics;
+  readonly truncations: readonly TruncationInfo[];
+}
+
+export interface ReportCompleteness {
+  readonly exportedEntries: number;
+  readonly truncatedEntries: number;
+  readonly omittedEntries: number;
+  readonly totalRawBytes: number;
+  readonly totalExportedBytes: number;
+  readonly totalOmittedBytes: number;
+}
+
+export interface InvestigationMetadata {
+  readonly exportPolicy: ExportPolicyType;
+  readonly reportVersion: string;
+  readonly captureTimestamp: number;
+  readonly investigationDuration: number;
+  readonly pageUrl: string;
+  readonly profile: string;
+  readonly configuredLimits: ExportLimits;
+}
+
 export interface InvestigationReport {
   readonly timestamp: number;
   readonly page: string;
@@ -130,4 +223,7 @@ export interface InvestigationReport {
   readonly storage: readonly StorageMatch[];
   readonly relationships: readonly Relationship[];
   readonly trace: TraceReport;
+  readonly enrichedStorage: readonly EnrichedStorageEntry[];
+  readonly completeness: ReportCompleteness;
+  readonly metadata: InvestigationMetadata;
 }

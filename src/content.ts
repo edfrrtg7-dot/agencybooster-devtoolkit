@@ -333,6 +333,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "GET_INVESTIGATION_DATA") {
     const report = lastInvestigationReport;
     const trace = report?.trace;
+    const completeness = report?.completeness;
+    const metadata = report?.metadata;
     sendResponse({
       lastRun: report?.timestamp ?? null,
       duration: report?.duration ?? null,
@@ -348,6 +350,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       traceStorageCorrelations: trace?.storageCorrelations.length ?? 0,
       traceHighConfidence: trace?.confidenceSummary.high ?? 0,
       traceLastTime: report?.timestamp ?? null,
+      storageExported: completeness?.exportedEntries ?? 0,
+      parsedJsonObjects: report?.enrichedStorage.filter((e) => e.metadata.isValidJson).length ?? 0,
+      generatedSchemas: report?.enrichedStorage.filter((e) => e.schema !== undefined).length ?? 0,
+      truncatedObjects: completeness?.truncatedEntries ?? 0,
+      exportPolicy: metadata?.exportPolicy ?? "smart",
     });
     return;
   }

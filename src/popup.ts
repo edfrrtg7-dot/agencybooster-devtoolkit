@@ -96,6 +96,11 @@ interface InvestigationData {
   traceStorageCorrelations: number;
   traceHighConfidence: number;
   traceLastTime: number | null;
+  storageExported: number;
+  parsedJsonObjects: number;
+  generatedSchemas: number;
+  truncatedObjects: number;
+  exportPolicy: string;
 }
 
 interface InvestigationRunResult {
@@ -609,6 +614,12 @@ function updateInvestigationStats(data: InvestigationData | null) {
   setText("trace-correlations", String(data.traceStorageCorrelations));
   setText("trace-high", String(data.traceHighConfidence));
   setText("trace-time", data.traceLastTime ? fmtTime(data.traceLastTime) : "--");
+  setText("se-exported", String(data.storageExported));
+  setText("se-parsed", String(data.parsedJsonObjects));
+  setText("se-schemas", String(data.generatedSchemas));
+  setText("se-truncated", String(data.truncatedObjects));
+  setText("se-report-size", data.reportSize > 0 ? `${Math.round(data.reportSize / 1024)}kb` : "--");
+  setText("se-policy", data.exportPolicy ?? "--");
 }
 
 function setupInvestigationButtons() {
