@@ -36,3 +36,47 @@ export function collectRuntimeSnapshot(): CreateObservationInput {
     } satisfies RuntimeSnapshotPayload,
   };
 }
+
+export function collectNavigation(from: string, to: string): CreateObservationInput {
+  return {
+    type: ObservationType.Runtime,
+    source: ObservationSource.RuntimeSpy,
+    confidence: Confidence.Verified,
+    page: getPageInfo(),
+    trigger: "navigation",
+    payload: { from, to },
+  };
+}
+
+export function collectHistoryChange(): CreateObservationInput {
+  return {
+    type: ObservationType.Runtime,
+    source: ObservationSource.RuntimeSpy,
+    confidence: Confidence.Verified,
+    page: getPageInfo(),
+    trigger: "popstate",
+    payload: { url: window.location.href, state: history.state },
+  };
+}
+
+export function collectHashChange(oldHash: string, newHash: string): CreateObservationInput {
+  return {
+    type: ObservationType.Runtime,
+    source: ObservationSource.RuntimeSpy,
+    confidence: Confidence.Verified,
+    page: getPageInfo(),
+    trigger: "hashchange",
+    payload: { oldHash, newHash },
+  };
+}
+
+export function collectVisibilityChange(visibility: DocumentVisibilityState): CreateObservationInput {
+  return {
+    type: ObservationType.Runtime,
+    source: ObservationSource.RuntimeSpy,
+    confidence: Confidence.Verified,
+    page: getPageInfo(),
+    trigger: "visibilitychange",
+    payload: { visibility },
+  };
+}

@@ -8,21 +8,50 @@ type FetchFn = typeof fetch;
  *
  * Wraps window.fetch and XHR open/send to record network requests.
  * Does NOT capture request or response bodies.
- * Does NOT modify requests or responses.
+ * Does NOT modify requests or responses — original functions are always called.
  *
- * What is observed:
- * - fetch calls (URL, method, status, duration)
- * - XMLHttpRequest (URL, method, status, duration)
+ * Browser APIs used:
+ * - window.fetch (patched) — intercepts fetch() calls
+ * - XMLHttpRequest.prototype.open (patched) — captures request method + URL
+ * - XMLHttpRequest.prototype.send (patched) — captures timing + status
+ * - XMLHttpRequest.status — response status code
+ * - performance.now() — high-resolution timing for duration
+ * - WeakMap — associates XHR data without modifying the XHR object
  *
- * What is intentionally ignored:
- * - request/response bodies
- * - request headers
- * - streaming responses
- * - WebSocket connections
+ * Observation types produced:
+ * - Fetch: url, method, status, duration (on success and failure)
+ * - XHR: url, method, status, duration (on loadend)
  *
- * How to add new network observations:
+ * Coverage:
+ * - fetch(): ✅ observed via window.fetch patch
+ * - XMLHttpRequest: ✅ observed via open/send patches
+ * - Request bodies: ❌ NOT captured (would require reading ReadableStream)
+ * - Response bodies: ❌ NOT captured (would require tee() on Response body)
+ * - Request headers: ❌ NOT captured
+ * - Response headers: ❌ NOT captured
+ * - WebSocket: ❌ NOT observed (different protocol, not interceptable via prototype)
+ * - Server-Sent Events (EventSource): ❌ NOT observed
+ * - Beacon API (navigator.sendBeacon): ❌ NOT observed
+ *
+ * MV3 / Chrome Extension limitations:
+ * - The "webRequest" permission would allow observing requests at the browser
+ *   level, but it requires broad permissions and is read-only in MV3 (no
+ *   blocking). The current approach (prototype patching) is sufficient for
+ *   page-initiated requests and requires only "activeTab" permission.
+ * - Requests initiated by browser internals (e.g. navigation, image preloads
+ *   before content script injection) are NOT observed because the explorer
+ *   hasn't started yet.
+ * - In MV3 service workers, fetch/XHR are available but the service worker
+ *   lifecycle is short. This explorer runs in the content script context
+ *   where it persists for the page lifetime.
+ * - Content Security Policy (CSP) does not affect prototype patching.
+ *
+ * How to extend:
  * 1. Extend collectNetworkRequest() in collectors/network-collector.ts.
- * 2. The payload is `unknown` on the Observation — no schema changes needed.
+ * 2. To capture request bodies, read the body from the Request/Response objects
+ *    (note: body streams are single-use — would need to clone).
+ * 3. To observe WebSocket, patch WebSocket.prototype.send and add an
+ *    onmessage handler (out of scope for this task).
  */
 export class NetworkExplorer {
   private running = false;

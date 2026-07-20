@@ -5,19 +5,40 @@ import { collectStorageChange } from "../../collectors";
  * Storage Explorer — passively observes localStorage and sessionStorage.
  *
  * Monkey-patches Storage.prototype.setItem and Storage.prototype.removeItem
- * to intercept all storage writes. Does NOT modify storage itself.
+ * to intercept all storage writes from page scripts. Does NOT modify storage
+ * itself — only wraps the methods to observe before calling the original.
  *
- * What is observed:
- * - setItem calls (new key or overwrite)
- * - removeItem calls
+ * Browser APIs used:
+ * - Storage.prototype.setItem (patched) — intercepts setItem calls
+ * - Storage.prototype.removeItem (patched) — intercepts removeItem calls
+ * - Storage.prototype.getItem (read only) — reads old value before change
  *
- * What is intentionally ignored:
- * - clear() calls (no per-key data available)
- * - getItem reads (not mutations)
+ * Observation types produced:
+ * - "set" — setItem called (key, oldValue, newValue, storageType)
+ * - "remove" — removeItem called (key, oldValue, storageType)
  *
- * How to add new storage observations:
+ * Coverage:
+ * - localStorage: ✅ observed via prototype patch
+ * - sessionStorage: ✅ observed via prototype patch
+ *
+ * Known limitations:
+ * - Storage.clear() is NOT observed. When clear() is called, all keys are
+ *   removed at once with no per-key oldValue data available. A future
+ *   enhancement could enumerate all keys before calling clear().
+ * - Cross-tab storage changes: the "storage" event only fires in OTHER
+ *   windows/tabs that share the same storage area. This explorer uses
+ *   prototype patching which captures the CURRENT page's writes directly.
+ *   Changes from other tabs/windows are NOT observed.
+ * - The storage event fires AFTER the write. Our prototype patch fires
+ *   BEFORE the write (to capture oldValue), which is more reliable.
+ * - In MV3 service workers, there is no access to localStorage/sessionStorage.
+ *   This explorer runs in the content script context only.
+ * - Prototype patching may conflict with other libraries that also patch
+ *   Storage.prototype (rare in practice).
+ *
+ * How to extend:
  * 1. Extend collectStorageChange() in collectors/storage-collector.ts.
- * 2. The payload is `unknown` on the Observation — no schema changes needed.
+ * 2. To observe clear(), add a patched Storage.prototype.clear method.
  */
 export class StorageExplorer {
   private running = false;
