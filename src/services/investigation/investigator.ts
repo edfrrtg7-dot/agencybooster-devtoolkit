@@ -2,12 +2,18 @@ import type {
   InvestigationConfig,
   InvestigationProfile,
   InvestigationReport,
+  TraceReport,
+  ConfidenceSummary,
 } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { investigateDOM } from "./dom-module";
 import { investigateRuntime } from "./runtime-module";
 import { investigateStorage } from "./storage-module";
 import { detectRelationships } from "./relationships";
+import { selectAnchors } from "./anchor-selector";
+import { traceRuntime } from "./runtime-trace";
+import { correlateStorage } from "./storage-correlation";
+import { buildTraceRelationships, classifyConfidence } from "./trace-confidence";
 
 export class RuntimeInvestigator {
   private config: InvestigationConfig;
@@ -63,11 +69,68 @@ export class RuntimeInvestigator {
       storageResult.matches,
     );
 
+    const anchors = selectAnchors(domResult.matches);
+
+    let trace: TraceReport;
+    if (anchors.length > 0) {
+      const runtimeTrace = traceRuntime(
+        anchors,
+        profile.keywords,
+        this.config.maxRecursionDepth,
+        this.config.maxObjects,
+      );
+
+      const storageCorrelations = correlateStorage(
+        anchors,
+        runtimeTrace.paths,
+        profile.keywords,
+        50,
+      );
+
+      const traceRelationships = buildTraceRelationships(
+        anchors,
+        runtimeTrace.paths,
+        storageCorrelations,
+      );
+
+      const confidenceSummary = classifyConfidence(traceRelationships);
+
+      if (runtimeTrace.truncated) {
+        truncated = true;
+        truncationReason += "Runtime trace truncated. ";
+      }
+
+      trace = {
+        anchors,
+        runtimePaths: runtimeTrace.paths,
+        storageCorrelations,
+        relationships: traceRelationships,
+        confidenceSummary,
+      };
+    } else {
+      trace = {
+        anchors: [],
+        runtimePaths: [],
+        storageCorrelations: [],
+        relationships: [],
+        confidenceSummary: { high: 0, medium: 0, low: 0, unverified: 0 },
+      };
+    }
+
+    const allRelationships = [...relationships, ...trace.relationships];
+    const totalSummary: ConfidenceSummary = {
+      high: classifyConfidence(allRelationships).high,
+      medium: classifyConfidence(allRelationships).medium,
+      low: classifyConfidence(allRelationships).low,
+      unverified: classifyConfidence(allRelationships).unverified,
+    };
+
     const reportSize = JSON.stringify({
       dom: domResult.matches,
       runtimeObjects: runtimeResult.matches,
       storage: storageResult.matches,
       relationships,
+      trace,
     }).length;
 
     if (reportSize > this.config.maxReportSize) {
@@ -88,12 +151,13 @@ export class RuntimeInvestigator {
         domMatches: domResult.matches.length,
         runtimeMatches: runtimeResult.matches.length,
         storageMatches: storageResult.matches.length,
-        relationships: relationships.length,
+        relationships: allRelationships.length,
       },
       dom: domResult.matches,
       runtimeObjects: runtimeResult.matches,
       storage: storageResult.matches,
-      relationships,
+      relationships: allRelationships,
+      trace,
     };
   }
 }

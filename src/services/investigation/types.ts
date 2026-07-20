@@ -51,8 +51,65 @@ export interface Relationship {
   readonly source: string;
   readonly target: string;
   readonly type: string;
-  readonly confidence: "High" | "Medium" | "Low";
+  readonly confidence: "High" | "Medium" | "Low" | "Unverified";
   readonly detail: string;
+}
+
+export interface DOMAnchor {
+  readonly selector: string;
+  readonly xpath: string;
+  readonly tagName: string;
+  readonly id: string;
+  readonly className: string;
+  readonly dataset: Readonly<Record<string, string>>;
+  readonly hierarchy: readonly string[];
+  readonly parentChain: readonly string[];
+  readonly siblingBefore: string;
+  readonly siblingAfter: string;
+  readonly childSummary: string;
+  readonly visibleText: string;
+  readonly nearbyText: string;
+  readonly attributes: Readonly<Record<string, string>>;
+  readonly matchedKeyword: string;
+}
+
+export interface TraceRuntimePath {
+  readonly path: string;
+  readonly valueType: string;
+  readonly preview: string;
+  readonly anchorRelation: string;
+  readonly depth: number;
+}
+
+export interface TraceStorageCorrelation {
+  readonly storageType: "localStorage" | "sessionStorage";
+  readonly key: string;
+  readonly valueType: string;
+  readonly anchorRelation: string;
+  readonly profileRelation: string;
+}
+
+export interface TraceRelationship {
+  readonly source: string;
+  readonly target: string;
+  readonly type: string;
+  readonly confidence: "High" | "Medium" | "Low" | "Unverified";
+  readonly detail: string;
+}
+
+export interface ConfidenceSummary {
+  readonly high: number;
+  readonly medium: number;
+  readonly low: number;
+  readonly unverified: number;
+}
+
+export interface TraceReport {
+  readonly anchors: readonly DOMAnchor[];
+  readonly runtimePaths: readonly TraceRuntimePath[];
+  readonly storageCorrelations: readonly TraceStorageCorrelation[];
+  readonly relationships: readonly TraceRelationship[];
+  readonly confidenceSummary: ConfidenceSummary;
 }
 
 export interface InvestigationReport {
@@ -72,4 +129,5 @@ export interface InvestigationReport {
   readonly runtimeObjects: readonly RuntimeMatch[];
   readonly storage: readonly StorageMatch[];
   readonly relationships: readonly Relationship[];
+  readonly trace: TraceReport;
 }

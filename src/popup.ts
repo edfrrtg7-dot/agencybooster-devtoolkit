@@ -90,6 +90,12 @@ interface InvestigationData {
   storageMatches: number;
   relationships: number;
   reportSize: number;
+  traceAnchorCount: number;
+  tracePrimaryAnchor: string | null;
+  traceRuntimePaths: number;
+  traceStorageCorrelations: number;
+  traceHighConfidence: number;
+  traceLastTime: number | null;
 }
 
 interface InvestigationRunResult {
@@ -597,6 +603,12 @@ function updateInvestigationStats(data: InvestigationData | null) {
   setText("inv-storage", String(data.storageMatches));
   setText("inv-relations", String(data.relationships));
   setText("inv-size", data.reportSize > 0 ? `${Math.round(data.reportSize / 1024)}kb` : "--");
+  setText("trace-anchors", String(data.traceAnchorCount));
+  setText("trace-primary", data.tracePrimaryAnchor ?? "--");
+  setText("trace-paths", String(data.traceRuntimePaths));
+  setText("trace-correlations", String(data.traceStorageCorrelations));
+  setText("trace-high", String(data.traceHighConfidence));
+  setText("trace-time", data.traceLastTime ? fmtTime(data.traceLastTime) : "--");
 }
 
 function setupInvestigationButtons() {

@@ -178,7 +178,7 @@ function summarizeObs(obs: Observation): string {
     case "Custom":
       if (obs.trigger === "snapshot") return `Snapshot captured: "${p.storageKey}" (${p.size} bytes)`;
       if (obs.trigger === "compare") return `Comparison: ${p.summary?.fieldsModified ?? 0} modified, ${p.summary?.fieldsAdded ?? 0} added, ${p.summary?.fieldsRemoved ?? 0} removed`;
-      if (obs.trigger === "investigate") return `Investigation [${p.profile}]: ${p.domMatches} DOM, ${p.runtimeMatches} runtime, ${p.storageMatches} storage`;
+      if (obs.trigger === "investigate") return `Investigation [${p.profile}]: ${p.domMatches} DOM, ${p.runtimeMatches} runtime, ${p.storageMatches} storage, ${p.relationships} relationships`;
       if (obs.trigger === "investigate-export") return `Investigation report exported (${p.reportSize} bytes)`;
       return "Custom event";
     default:
@@ -332,6 +332,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === "GET_INVESTIGATION_DATA") {
     const report = lastInvestigationReport;
+    const trace = report?.trace;
     sendResponse({
       lastRun: report?.timestamp ?? null,
       duration: report?.duration ?? null,
@@ -341,6 +342,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       storageMatches: report?.summary.storageMatches ?? 0,
       relationships: report?.summary.relationships ?? 0,
       reportSize: report ? JSON.stringify(report).length : 0,
+      traceAnchorCount: trace?.anchors.length ?? 0,
+      tracePrimaryAnchor: trace?.anchors[0]?.selector ?? null,
+      traceRuntimePaths: trace?.runtimePaths.length ?? 0,
+      traceStorageCorrelations: trace?.storageCorrelations.length ?? 0,
+      traceHighConfidence: trace?.confidenceSummary.high ?? 0,
+      traceLastTime: report?.timestamp ?? null,
     });
     return;
   }
