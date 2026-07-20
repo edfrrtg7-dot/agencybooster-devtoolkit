@@ -6,6 +6,7 @@ import { RuntimeExplorer } from "./explorers/runtime";
 import { StorageSnapshotService } from "./services";
 import { RuntimeInvestigator, getProfile } from "./services/investigation";
 import { diffReports } from "./services/investigation/diff-engine";
+import { analyzeSemantics } from "./services/investigation/semantic-engine";
 import { getPageInfo } from "./collectors";
 import { ObservationType, ObservationSource, Confidence } from "./core";
 import type { Observation, ObservationRegistry } from "./core";
@@ -22,6 +23,7 @@ let lastInvestigationReport: ReturnType<typeof investigator.run> | null = null;
 let beforeReport: ReturnType<typeof investigator.run> | null = null;
 let afterReport: ReturnType<typeof investigator.run> | null = null;
 let lastDiffReport: ReturnType<typeof diffReports> | null = null;
+let lastSemanticReport: ReturnType<typeof analyzeSemantics> | null = null;
 
 interface ExplorerEntry {
   name: string;
@@ -425,6 +427,90 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       noiseIgnored: diff?.statistics.noiseIgnored ?? 0,
       hasBefore: beforeReport !== null,
       hasAfter: afterReport !== null,
+    });
+    return;
+  }
+
+  if (message.type === "RUN_SEMANTIC") {
+    if (!lastDiffReport) {
+      sendResponse({ error: "No diff report available. Run diff first." });
+      return;
+    }
+    try {
+      const profileName = (message.profile as string) || lastDiffReport.afterProfile || "Generic";
+      const containers = (message.containers as string[]) || [];
+      lastSemanticReport = analyzeSemantics(lastDiffReport, profileName, containers);
+      recorder.record({
+        type: ObservationType.Custom,
+        source: ObservationSource.Unknown,
+        confidence: Confidence.Derived,
+        page: getPageInfo(),
+        trigger: "semantic-analysis",
+        payload: {
+          events: lastSemanticReport.statistics.semanticEvents,
+          ignored: lastSemanticReport.statistics.ignoredChanges,
+          duration: lastSemanticReport.duration,
+        },
+      });
+      sendResponse({ report: lastSemanticReport });
+    } catch (err) {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  if (message.type === "EXPORT_SEMANTIC") {
+    if (!lastSemanticReport) {
+      sendResponse({ error: "No semantic report available. Run semantic analysis first." });
+      return;
+    }
+    const format = (message.format as string) || "detailed";
+    let text: string;
+    if (format === "summary") {
+      const lines = [
+        `Semantic Analysis — ${lastSemanticReport.summary.headline}`,
+        "",
+        "Actions:",
+        ...lastSemanticReport.summary.actions.map((a) => `  - ${a}`),
+        "",
+        "Details:",
+        ...lastSemanticReport.summary.details.map((d) => `  - ${d}`),
+      ];
+      if (lastSemanticReport.summary.noiseIgnored.length > 0) {
+        lines.push("", "Noise ignored:");
+        lines.push(...lastSemanticReport.summary.noiseIgnored.map((n) => `  - ${n}`));
+      }
+      text = lines.join("\n");
+    } else {
+      text = JSON.stringify(lastSemanticReport, null, 2);
+    }
+    recorder.record({
+      type: ObservationType.Custom,
+      source: ObservationSource.Unknown,
+      confidence: Confidence.Derived,
+      page: getPageInfo(),
+      trigger: "semantic-export",
+      payload: { format, reportSize: text.length, events: lastSemanticReport.statistics.semanticEvents },
+    });
+    sendResponse({ text });
+    return;
+  }
+
+  if (message.type === "GET_SEMANTIC_DATA") {
+    const sr = lastSemanticReport;
+    sendResponse({
+      hasReport: sr !== null,
+      events: sr?.statistics.semanticEvents ?? 0,
+      ignored: sr?.statistics.ignoredChanges ?? 0,
+      focusedContainers: sr?.statistics.focusedContainers ?? 0,
+      groupedDom: sr?.statistics.groupedDomChanges ?? 0,
+      storageEvents: sr?.statistics.storageEvents ?? 0,
+      runtimeEvents: sr?.statistics.runtimeEvents ?? 0,
+      highConfidence: sr?.confidenceDistribution.high ?? 0,
+      mediumConfidence: sr?.confidenceDistribution.medium ?? 0,
+      lowConfidence: sr?.confidenceDistribution.low ?? 0,
+      analysisDuration: sr?.duration ?? 0,
+      headline: sr?.summary.headline ?? null,
     });
     return;
   }

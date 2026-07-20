@@ -115,6 +115,24 @@ This PR fixes the broken build scaffold and adds a full Observation Core, four E
 - Popup: new "Storage Export" diagnostics section (6 stat boxes)
 - 5 new enrichment modules, 868 lines added
 
+### ABDT-018 — Investigation State Diff Engine
+- `src/services/investigation/diff-types.ts`: DiffReport, DiffEntry, DiffChange, DiffClassification, section diff types
+- `src/services/investigation/diff-dom.ts`: DOM diff — detects added/removed/modified nodes by selector, summarizes text/childCount/attribute changes
+- `src/services/investigation/diff-storage.ts`: Storage diff — recursive JSON comparison, property-level diffs, change classification (Critical/Major/Minor)
+- `src/services/investigation/diff-runtime.ts`: Runtime diff — added/removed/changed objects by path
+- `src/services/investigation/diff-relationships.ts`: Relationship diff — new/removed/changed confidence relationships
+- `src/services/investigation/diff-trace.ts`: Trace diff — anchors, runtime paths, storage correlations changes
+- `src/services/investigation/diff-metadata.ts`: Metadata diff — filters noise (timestamps, duration, report version), reports meaningful changes only
+- `src/services/investigation/diff-summary.ts`: Executive summary builder + statistics calculator + entry flattener
+- `src/services/investigation/diff-engine.ts`: Orchestrator — runs all diff modules, produces InvestigationDiffReport
+- Content script: SET_BEFORE_REPORT, SET_AFTER_REPORT, RUN_DIFF, EXPORT_DIFF, GET_DIFF_DATA message handlers
+- Before/After workflow: set before report, set after report, run diff, export diff
+- Popup: State Diff section with Set Before/Set After/Run Diff/Export buttons + 9 stat boxes
+- Change classifications: Critical (storage removed), Major (value changed, DOM rebuilt), Minor (counter updated), Informational (metadata)
+- Noise filtering: timestamps, investigation duration, report version not reported as changes
+- Executive summary sections: DOM, Storage, Runtime, Relationships, Trace
+- 9 new diff modules, 1056 lines added
+
 ## Architecture
 ```
 Explorers → Collectors → ObservationRecorder → ObservationRegistry → EventBus
@@ -128,19 +146,20 @@ Explorers → Collectors → ObservationRecorder → ObservationRegistry → Eve
                                                           - Runtime investigation
                                                           - DOM anchor trace
                                                           - Storage export enrichment
+                                                          - State diff engine
 ```
 
 ## Verification
 - `npm run typecheck` passes (0 errors) after each ABDT task
 - `npm run build` produces clean output after each ABDT task
-- Final build sizes: content.js ~76.7kb, popup.js ~16.8kb, background.js ~2.4kb
-- 12 source files changed, 868 insertions in ABDT-017 alone
+- Final build sizes: content.js ~98.1kb, popup.js ~19.3kb, background.js ~2.4kb
+- 14 source files changed, 1056 insertions in ABDT-018 alone
 
 ## Key Files
 - `src/core/` — Observation Core (7 files)
 - `src/collectors/` — Browser API collectors (5 files)
 - `src/explorers/` — Explorer modules (4 modules)
-- `src/services/investigation/` — Runtime Investigation + Trace + Report Enrichment (18 files)
+- `src/services/investigation/` — Runtime Investigation + Trace + Report Enrichment + State Diff (27 files)
 - `src/content.ts` — Content script wiring all explorers, collectors, snapshot service, investigator
 - `src/popup.ts` — Full diagnostics dashboard
 - `popup.html` — Dashboard layout

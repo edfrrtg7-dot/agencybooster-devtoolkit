@@ -233,6 +233,27 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">Semantic Analysis</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-run-semantic">Run Semantic Analysis</button>
+      <button class="btn" id="btn-export-semantic">Export Semantic Report</button>
+    </div>
+    <div class="grid" style="margin-top: 8px;" id="semantic-grid">
+      <div class="stat-box"><div class="label">Headline</div><div class="value sm" id="sem-headline">--</div></div>
+      <div class="stat-box"><div class="label">Semantic Events</div><div class="value" id="sem-events">0</div></div>
+      <div class="stat-box"><div class="label">Ignored Changes</div><div class="value" id="sem-ignored">0</div></div>
+      <div class="stat-box"><div class="label">Focused Containers</div><div class="value" id="sem-containers">0</div></div>
+      <div class="stat-box"><div class="label">Grouped DOM</div><div class="value" id="sem-grouped-dom">0</div></div>
+      <div class="stat-box"><div class="label">Storage Events</div><div class="value" id="sem-storage-events">0</div></div>
+      <div class="stat-box"><div class="label">Runtime Events</div><div class="value" id="sem-runtime-events">0</div></div>
+      <div class="stat-box"><div class="label">High Confidence</div><div class="value" id="sem-high">0</div></div>
+      <div class="stat-box"><div class="label">Medium Confidence</div><div class="value" id="sem-medium">0</div></div>
+      <div class="stat-box"><div class="label">Low Confidence</div><div class="value" id="sem-low">0</div></div>
+      <div class="stat-box"><div class="label">Analysis Duration</div><div class="value sm" id="sem-duration">--</div></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="dist/popup.js" type="module"></script>

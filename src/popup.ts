@@ -152,6 +152,31 @@ interface DiffExportResult {
   error?: string;
 }
 
+interface SemanticData {
+  hasReport: boolean;
+  events: number;
+  ignored: number;
+  focusedContainers: number;
+  groupedDom: number;
+  storageEvents: number;
+  runtimeEvents: number;
+  highConfidence: number;
+  mediumConfidence: number;
+  lowConfidence: number;
+  analysisDuration: number;
+  headline: string | null;
+}
+
+interface SemanticRunResult {
+  report?: { statistics?: { semanticEvents: number; ignoredChanges: number; analysisDuration: number }; summary?: { headline: string } };
+  error?: string;
+}
+
+interface SemanticExportResult {
+  text?: string;
+  error?: string;
+}
+
 let cachedData: DiagnosticData | null = null;
 let autoScroll = true;
 let firstObsLoad = true;
@@ -665,6 +690,49 @@ function updateDiffStats(data: DiffData | null) {
   setText("diff-noise", String(data.noiseIgnored));
 }
 
+// --- Semantic Analysis UI ---
+
+function updateSemanticStats(data: SemanticData | null) {
+  if (!data) return;
+  setText("sem-headline", data.headline ?? "--");
+  setText("sem-events", String(data.events));
+  setText("sem-ignored", String(data.ignored));
+  setText("sem-containers", String(data.focusedContainers));
+  setText("sem-grouped-dom", String(data.groupedDom));
+  setText("sem-storage-events", String(data.storageEvents));
+  setText("sem-runtime-events", String(data.runtimeEvents));
+  setText("sem-high", String(data.highConfidence));
+  setText("sem-medium", String(data.mediumConfidence));
+  setText("sem-low", String(data.lowConfidence));
+  setText("sem-duration", data.analysisDuration > 0 ? `${data.analysisDuration}ms` : "--");
+}
+
+function setupSemanticButtons() {
+  document.getElementById("btn-run-semantic")!.addEventListener("click", async () => {
+    const result = await sendMessage<SemanticRunResult>({ type: "RUN_SEMANTIC" });
+    if (result?.error) { showToast(result.error); return; }
+    if (result?.report?.summary?.headline) {
+      showToast(result.report.summary.headline);
+    } else {
+      showToast("Semantic analysis complete.");
+    }
+  });
+
+  document.getElementById("btn-export-semantic")!.addEventListener("click", async () => {
+    const result = await sendMessage<SemanticExportResult>({ type: "EXPORT_SEMANTIC", format: "detailed" });
+    if (result?.error) { showToast(result.error); return; }
+    if (result?.text) {
+      try {
+        const ok = await copyText(result.text);
+        showToast(ok ? "Semantic report copied." : "Failed to copy — check clipboard permissions");
+      } catch (err) {
+        showToast("Clipboard error — see console");
+        console.error("ABDT: clipboard error during semantic export", err);
+      }
+    }
+  });
+}
+
 function setupDiffButtons() {
   document.getElementById("btn-set-before")!.addEventListener("click", async () => {
     const result = await sendMessage<{ hasBefore?: boolean; error?: string }>({ type: "SET_BEFORE_REPORT" });
@@ -747,6 +815,8 @@ async function poll() {
   updateInvestigationStats(invData);
   const diffData = await sendMessage<DiffData>({ type: "GET_DIFF_DATA" });
   updateDiffStats(diffData);
+  const semData = await sendMessage<SemanticData>({ type: "GET_SEMANTIC_DATA" });
+  updateSemanticStats(semData);
 }
 
 setupLiveObsControls();
@@ -754,5 +824,6 @@ setupClipboardButtons();
 setupSnapshotButtons();
 setupInvestigationButtons();
 setupDiffButtons();
+setupSemanticButtons();
 poll();
 setInterval(poll, 2000);

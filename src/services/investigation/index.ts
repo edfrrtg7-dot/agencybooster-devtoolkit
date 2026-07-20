@@ -6,6 +6,7 @@ export { generateObjectTree } from "./object-tree";
 export { computeObjectStatistics } from "./object-statistics";
 export { enrichStorageEntry, buildCompleteness, buildInvestigationMetadata } from "./storage-export";
 export { diffReports } from "./diff-engine";
+export { analyzeSemantics } from "./semantic-engine";
 export type { InvestigationProfile } from "./types";
 export type {
   InvestigationConfig,
@@ -45,4 +46,17 @@ export type {
   TraceDiffResult,
   MetadataDiffResult,
 } from "./diff-types";
+export type {
+  SemanticReport,
+  SemanticEvent,
+  EventConfidence,
+  EvidenceItem,
+  SemanticSummary,
+  ConfidenceDistribution,
+  IgnoredChange,
+  SemanticStatistics,
+  FocusContainer,
+  TimelineEntry,
+  SemanticRule,
+} from "./semantic-types";
 export { DEFAULT_CONFIG, DEFAULT_EXPORT_LIMITS } from "./types";
