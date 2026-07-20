@@ -6,18 +6,28 @@ import { RuntimeExplorer } from "./explorers/runtime";
 import type { Observation, ObservationRegistry } from "./core";
 
 const { sessionManager, recorder, registry } = createPipeline();
-sessionManager.start();
+const session = sessionManager.start();
 
 interface ExplorerEntry {
   name: string;
   running: boolean;
-  startedAt: number | null;
+  startedAt: number;
+  lastActivityAt: number | null;
+  totalObservations: number;
+  recentTimestamps: number[];
 }
 
 const explorerEntries: ExplorerEntry[] = [];
 
 function registerAndStart(name: string, explorer: { start(): void; stop(): void }) {
-  const entry: ExplorerEntry = { name, running: false, startedAt: null };
+  const entry: ExplorerEntry = {
+    name,
+    running: false,
+    startedAt: Date.now(),
+    lastActivityAt: null,
+    totalObservations: 0,
+    recentTimestamps: [],
+  };
   explorerEntries.push(entry);
   explorer.start();
   entry.running = true;
@@ -27,13 +37,61 @@ function registerAndStart(name: string, explorer: { start(): void; stop(): void 
 registerAndStart("Runtime Explorer", new RuntimeExplorer(recorder));
 registerAndStart("DOM Explorer", new DOMExplorer(recorder));
 registerAndStart("Storage Explorer", new StorageExplorer(recorder));
-registerAndStart("Network Explorer", new NetworkExplorer(recorder));
+registerAndStart("NetworkExplorer", new NetworkExplorer(recorder));
 
-function getExplorerStatus() {
+function recordActivity(source: string) {
+  const entry = explorerEntries.find((e) => e.name.includes(source.replace("Spy", "").replace("Inspector", "")));
+  if (!entry) return;
+  const now = Date.now();
+  entry.lastActivityAt = now;
+  entry.totalObservations++;
+  entry.recentTimestamps.push(now);
+  const cutoff = now - 10_000;
+  while (entry.recentTimestamps.length > 0 && entry.recentTimestamps[0] < cutoff) {
+    entry.recentTimestamps.shift();
+  }
+}
+
+const originalRecord = recorder.record.bind(recorder);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(recorder as any).record = function (input: any) {
+  const obs = originalRecord(input);
+  recordActivity(obs.source);
+  return obs;
+};
+
+function pruneTimestamps() {
+  const cutoff = Date.now() - 10_000;
+  for (const entry of explorerEntries) {
+    while (entry.recentTimestamps.length > 0 && entry.recentTimestamps[0] < cutoff) {
+      entry.recentTimestamps.shift();
+    }
+  }
+}
+
+function computeRate(entry: ExplorerEntry): number {
+  const cutoff = Date.now() - 10_000;
+  const count = entry.recentTimestamps.filter((t) => t >= cutoff).length;
+  return count / 10;
+}
+
+function computeHealth(entry: ExplorerEntry): string {
+  if (!entry.running) return "error";
+  if (entry.totalObservations === 0) return "idle";
+  if (entry.lastActivityAt !== null && Date.now() - entry.lastActivityAt > 30_000) return "silent";
+  return "healthy";
+}
+
+function getExplorerStats() {
+  pruneTimestamps();
   return explorerEntries.map((e) => ({
     name: e.name,
     running: e.running,
     startedAt: e.startedAt,
+    lastActivityAt: e.lastActivityAt,
+    totalObservations: e.totalObservations,
+    rate: computeRate(e),
+    health: computeHealth(e),
   }));
 }
 
@@ -41,16 +99,29 @@ function getObsStats(reg: ObservationRegistry) {
   const all = reg.getAll();
   const perExplorer: Record<string, number> = {};
   let lastTimestamp: number | null = null;
+  let maxCount = 0;
+  let mostActive = "";
 
   for (const obs of all) {
     const key = obs.source;
-    perExplorer[key] = (perExplorer[key] ?? 0) + 1;
+    const count = (perExplorer[key] ?? 0) + 1;
+    perExplorer[key] = count;
+    if (count > maxCount) {
+      maxCount = count;
+      mostActive = key;
+    }
     if (lastTimestamp === null || obs.timestamp > lastTimestamp) {
       lastTimestamp = obs.timestamp;
     }
   }
 
-  return { total: reg.count(), perExplorer, lastTimestamp };
+  pruneTimestamps();
+  let globalRate = 0;
+  for (const entry of explorerEntries) {
+    globalRate += computeRate(entry);
+  }
+
+  return { total: reg.count(), perExplorer, lastTimestamp, mostActive, globalRate };
 }
 
 function getRecentObs(reg: ObservationRegistry) {
@@ -102,7 +173,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === "GET_DATA") {
     sendResponse({
-      explorerStatus: getExplorerStatus(),
+      explorerStats: getExplorerStats(),
       obsStats: getObsStats(registry),
       recorderStatus: {
         recorderInitialized: true,
@@ -115,6 +186,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         userAgent: navigator.userAgent,
         pageUrl: window.location.href,
         sessionId: sessionManager.getCurrentId(),
+        sessionStartedAt: session.startedAt,
       },
     });
     return;
