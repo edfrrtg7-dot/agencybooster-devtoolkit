@@ -21,17 +21,8 @@
       background: #161b22;
       border-bottom: 1px solid #30363d;
     }
-    .header h1 {
-      font-size: 14px;
-      font-weight: 600;
-      color: #f0f6fc;
-      margin: 0;
-    }
-    .header .subtitle {
-      font-size: 11px;
-      color: #8b949e;
-      margin-top: 2px;
-    }
+    .header h1 { font-size: 14px; font-weight: 600; color: #f0f6fc; margin: 0; }
+    .header .subtitle { font-size: 11px; color: #8b949e; margin-top: 2px; }
     .section {
       padding: 12px 16px;
       border-bottom: 1px solid #21262d;
@@ -70,6 +61,40 @@
     .stat-row.total { padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid #21262d; }
     .stat-row.total .stat-label { font-weight: 600; color: #f0f6fc; }
     .stat-row.total .stat-value { font-size: 18px; color: #58a6ff; }
+    .btn-group { display: flex; gap: 6px; }
+    .btn {
+      flex: 1;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #21262d;
+      color: #c9d1d9;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn:hover { background: #30363d; border-color: #8b949e; }
+    .btn:active { background: #161b22; }
+    .toast {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #f0f6fc;
+      background: #238636;
+      border-radius: 6px;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
@@ -78,25 +103,35 @@
     <div class="subtitle">Diagnostics</div>
   </div>
 
-  <div class="section" id="section-explorers">
+  <div class="section">
     <div class="section-title">Explorer Status</div>
     <div id="explorers"><div class="item"><span class="item-value unavail">Waiting for content script...</span></div></div>
   </div>
 
-  <div class="section" id="section-observations">
+  <div class="section">
     <div class="section-title">Observation Statistics</div>
     <div id="observations"><div class="item"><span class="item-value unavail">Waiting for content script...</span></div></div>
   </div>
 
-  <div class="section" id="section-recorder">
+  <div class="section">
     <div class="section-title">Recorder Status</div>
     <div id="recorder"><div class="item"><span class="item-value unavail">Waiting for content script...</span></div></div>
   </div>
 
-  <div class="section" id="section-runtime">
+  <div class="section">
     <div class="section-title">Runtime Information</div>
     <div id="runtime"><div class="item"><span class="item-value unavail">Loading...</span></div></div>
   </div>
+
+  <div class="section">
+    <div class="section-title">Developer Tools</div>
+    <div class="btn-group">
+      <button class="btn" id="btn-copy-diag">Copy Diagnostics</button>
+      <button class="btn" id="btn-copy-obs">Copy Recent Observations</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
 
   <script src="dist/popup.js" type="module"></script>
 </body>

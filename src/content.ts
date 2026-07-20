@@ -3,7 +3,7 @@ import { DOMExplorer } from "./explorers/dom";
 import { StorageExplorer } from "./explorers/storage";
 import { NetworkExplorer } from "./explorers/network";
 import { RuntimeExplorer } from "./explorers/runtime";
-import type { ObservationRegistry } from "./core";
+import type { Observation, ObservationRegistry } from "./core";
 
 const { sessionManager, recorder, registry } = createPipeline();
 sessionManager.start();
@@ -53,6 +53,47 @@ function getObsStats(reg: ObservationRegistry) {
   return { total: reg.count(), perExplorer, lastTimestamp };
 }
 
+function getRecentObs(reg: ObservationRegistry) {
+  return reg
+    .getAll()
+    .slice(-100)
+    .reverse()
+    .map((obs: Observation) => ({
+      timestamp: obs.timestamp,
+      source: obs.source,
+      type: obs.type,
+      summary: summarizeObs(obs),
+    }));
+}
+
+function summarizeObs(obs: Observation): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = obs.payload as any;
+  if (!p) return obs.type;
+
+  switch (obs.type) {
+    case "DOM":
+      if (p.mutationType === "childList") {
+        const parts: string[] = [];
+        if (p.addedCount) parts.push(`${p.addedCount} added`);
+        if (p.removedCount) parts.push(`${p.removedCount} removed`);
+        return `Element ${p.mutationType} (${parts.join(", ")}) <${p.targetTag}>`;
+      }
+      if (p.mutationType === "attributes") return `Attribute "${p.attributeName}" changed on <${p.targetTag}>`;
+      if (p.mutationType === "characterData") return `Text changed on <${p.targetTag}>`;
+      return `DOM ${p.mutationType}`;
+    case "Storage":
+      if (p.newValue === null) return `${p.storageType} removeItem "${p.key}"`;
+      return `${p.storageType} setItem "${p.key}"`;
+    case "Network":
+      return `${p.method} ${p.url}${p.status ? ` (${p.status})` : ""}`;
+    case "Runtime":
+      return "Runtime initialized";
+    default:
+      return obs.type;
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "PING") {
     sendResponse({ type: "PONG", source: "content" });
@@ -76,5 +117,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sessionId: sessionManager.getCurrentId(),
       },
     });
+    return;
+  }
+
+  if (message.type === "GET_RECENT_OBS") {
+    sendResponse(getRecentObs(registry));
   }
 });

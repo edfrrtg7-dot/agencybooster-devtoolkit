@@ -32,14 +32,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ type: "PONG", source: "background", content: "no-tab" });
   }
 
-  if (message.type === "GET_DATA") {
+  if (message.type === "GET_DATA" || message.type === "GET_RECENT_OBS") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       const tabId = tabs[0]?.id;
       if (!tabId) {
         sendResponse(null);
         return;
       }
-      const data = await queryContent(tabId, { type: "GET_DATA" });
+      const data = await queryContent(tabId, { type: message.type });
       sendResponse(data);
     });
     return true;
