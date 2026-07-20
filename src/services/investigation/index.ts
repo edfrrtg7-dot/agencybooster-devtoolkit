@@ -5,6 +5,7 @@ export { generateSchema } from "./schema-generator";
 export { generateObjectTree } from "./object-tree";
 export { computeObjectStatistics } from "./object-statistics";
 export { enrichStorageEntry, buildCompleteness, buildInvestigationMetadata } from "./storage-export";
+export { diffReports } from "./diff-engine";
 export type { InvestigationProfile } from "./types";
 export type {
   InvestigationConfig,
@@ -30,4 +31,18 @@ export type {
   ReportCompleteness,
   InvestigationMetadata,
 } from "./types";
+export type {
+  InvestigationDiffReport,
+  DiffEntry,
+  DiffChange,
+  DiffClassification,
+  DiffStatistics,
+  ExecutiveSummary,
+  DOMDiffResult,
+  StorageDiffResult,
+  RuntimeDiffResult,
+  RelationshipDiffResult,
+  TraceDiffResult,
+  MetadataDiffResult,
+} from "./diff-types";
 export { DEFAULT_CONFIG, DEFAULT_EXPORT_LIMITS } from "./types";

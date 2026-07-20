@@ -212,6 +212,27 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-title">State Diff</div>
+    <div class="btn-group" style="flex-wrap: wrap;">
+      <button class="btn" id="btn-set-before">Set Before</button>
+      <button class="btn" id="btn-set-after">Set After</button>
+      <button class="btn" id="btn-run-diff">Run Diff</button>
+      <button class="btn" id="btn-export-diff">Export Diff Report</button>
+    </div>
+    <div class="grid" style="margin-top: 8px;" id="diff-grid">
+      <div class="stat-box"><div class="label">Has Before</div><div class="value sm" id="diff-before">No</div></div>
+      <div class="stat-box"><div class="label">Has After</div><div class="value sm" id="diff-after">No</div></div>
+      <div class="stat-box"><div class="label">Changes Detected</div><div class="value sm" id="diff-changes">No</div></div>
+      <div class="stat-box"><div class="label">DOM Changes</div><div class="value" id="diff-dom">0</div></div>
+      <div class="stat-box"><div class="label">Storage Changes</div><div class="value" id="diff-storage">0</div></div>
+      <div class="stat-box"><div class="label">Runtime Changes</div><div class="value" id="diff-runtime">0</div></div>
+      <div class="stat-box"><div class="label">Relationship Changes</div><div class="value" id="diff-relations">0</div></div>
+      <div class="stat-box"><div class="label">Trace Changes</div><div class="value" id="diff-trace">0</div></div>
+      <div class="stat-box"><div class="label">Noise Ignored</div><div class="value" id="diff-noise">0</div></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script src="dist/popup.js" type="module"></script>

@@ -5,6 +5,7 @@ import { NetworkExplorer } from "./explorers/network";
 import { RuntimeExplorer } from "./explorers/runtime";
 import { StorageSnapshotService } from "./services";
 import { RuntimeInvestigator, getProfile } from "./services/investigation";
+import { diffReports } from "./services/investigation/diff-engine";
 import { getPageInfo } from "./collectors";
 import { ObservationType, ObservationSource, Confidence } from "./core";
 import type { Observation, ObservationRegistry } from "./core";
@@ -18,6 +19,9 @@ const keyUpdates = new Map<string, number>();
 const snapshotService = new StorageSnapshotService();
 const investigator = new RuntimeInvestigator();
 let lastInvestigationReport: ReturnType<typeof investigator.run> | null = null;
+let beforeReport: ReturnType<typeof investigator.run> | null = null;
+let afterReport: ReturnType<typeof investigator.run> | null = null;
+let lastDiffReport: ReturnType<typeof diffReports> | null = null;
 
 interface ExplorerEntry {
   name: string;
@@ -355,6 +359,72 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       generatedSchemas: report?.enrichedStorage.filter((e) => e.schema !== undefined).length ?? 0,
       truncatedObjects: completeness?.truncatedEntries ?? 0,
       exportPolicy: metadata?.exportPolicy ?? "smart",
+    });
+    return;
+  }
+
+  if (message.type === "SET_BEFORE_REPORT") {
+    beforeReport = lastInvestigationReport;
+    sendResponse({ hasBefore: beforeReport !== null });
+    return;
+  }
+
+  if (message.type === "SET_AFTER_REPORT") {
+    afterReport = lastInvestigationReport;
+    sendResponse({ hasAfter: afterReport !== null });
+    return;
+  }
+
+  if (message.type === "RUN_DIFF") {
+    if (!beforeReport || !afterReport) {
+      sendResponse({ error: "Need both before and after reports. Set both before running diff." });
+      return;
+    }
+    try {
+      lastDiffReport = diffReports(beforeReport, afterReport);
+      sendResponse({ report: lastDiffReport });
+    } catch (err) {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  if (message.type === "EXPORT_DIFF") {
+    if (!lastDiffReport) {
+      sendResponse({ error: "No diff report available. Run diff first." });
+      return;
+    }
+    const text = JSON.stringify(lastDiffReport, null, 2);
+    recorder.record({
+      type: ObservationType.Custom,
+      source: ObservationSource.Unknown,
+      confidence: Confidence.Derived,
+      page: getPageInfo(),
+      trigger: "diff-export",
+      payload: { reportSize: text.length, hasChanges: lastDiffReport.summary.hasChanges },
+    });
+    sendResponse({ text });
+    return;
+  }
+
+  if (message.type === "GET_DIFF_DATA") {
+    const diff = lastDiffReport;
+    sendResponse({
+      hasDiff: diff !== null,
+      hasChanges: diff?.summary.hasChanges ?? false,
+      domAdded: diff?.statistics.domAdded ?? 0,
+      domRemoved: diff?.statistics.domRemoved ?? 0,
+      domModified: diff?.statistics.domModified ?? 0,
+      storageChangedKeys: diff?.statistics.storageChangedKeys ?? 0,
+      storageChangedProperties: diff?.statistics.storageChangedProperties ?? 0,
+      runtimeChanged: diff?.statistics.runtimeChanged ?? 0,
+      relationshipAdded: diff?.statistics.relationshipAdded ?? 0,
+      relationshipRemoved: diff?.statistics.relationshipRemoved ?? 0,
+      relationshipModified: diff?.statistics.relationshipModified ?? 0,
+      traceChanges: diff?.statistics.traceChanges ?? 0,
+      noiseIgnored: diff?.statistics.noiseIgnored ?? 0,
+      hasBefore: beforeReport !== null,
+      hasAfter: afterReport !== null,
     });
     return;
   }

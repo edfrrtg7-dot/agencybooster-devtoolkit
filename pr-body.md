@@ -1,7 +1,7 @@
-# ABDT-003A through ABDT-016: AgencyBooster Developer Toolkit - Complete Build
+# ABDT-003A through ABDT-017: AgencyBooster Developer Toolkit - Complete Build
 
 ## Overview
-This PR fixes the broken build scaffold and adds a full Observation Core, four Explorer modules, a Collector layer, a Diagnostics Dashboard, Storage Snapshot & Object Diff, a Runtime Investigation Framework, and DOM Anchor Runtime Trace — producing a fully buildable, installable MV3 Chrome Extension.
+This PR fixes the broken build scaffold and adds a full Observation Core, four Explorer modules, a Collector layer, a Diagnostics Dashboard, Storage Snapshot & Object Diff, a Runtime Investigation Framework with DOM Anchor Runtime Trace, and Investigation Report Enrichment — producing a fully buildable, installable MV3 Chrome Extension.
 
 ## Commits (oldest to newest)
 
@@ -98,6 +98,23 @@ This PR fixes the broken build scaffold and adds a full Observation Core, four E
 - Popup: new "DOM Anchor Trace" diagnostics section (6 stat boxes)
 - 5 new trace modules, 835 lines added
 
+### ABDT-017 — Investigation Report Enrichment
+- `src/services/investigation/export-policy.ts`: Smart/Full policies with configurable limits
+- `src/services/investigation/schema-generator.ts`: infers JSON schema summaries for parsed objects, nested arrays of objects
+- `src/services/investigation/object-tree.ts`: lightweight structural tree with depth limits, circular reference protection
+- `src/services/investigation/object-statistics.ts`: counts objects/arrays/primitives/nesting depth
+- `src/services/investigation/storage-export.ts`: full storage export with metadata, truncation tracking, completeness
+- Extended InvestigationConfig with ExportPolicyType and ExportLimits
+- Extended InvestigationReport with enrichedStorage, completeness, metadata
+- Enriched storage entries include: metadata (storageType, key, valueType, rawSize, parsedSize, isValidJson, rootType, topLevelPropertyCount), exportedData, schema, tree, statistics, truncations
+- TruncationInfo records path, reason, omittedBytes, originalSize, exportedSize
+- ReportCompleteness tracks exported/truncated/omitted entries and bytes
+- InvestigationMetadata includes exportPolicy, reportVersion, captureTimestamp, investigationDuration, pageUrl, profile, configuredLimits
+- Investigator runs full enrichment pipeline on storage matches
+- Content script returns 5 new storage export diagnostics (storageExported, parsedJsonObjects, generatedSchemas, truncatedObjects, exportPolicy)
+- Popup: new "Storage Export" diagnostics section (6 stat boxes)
+- 5 new enrichment modules, 868 lines added
+
 ## Architecture
 ```
 Explorers → Collectors → ObservationRecorder → ObservationRegistry → EventBus
@@ -110,19 +127,20 @@ Explorers → Collectors → ObservationRecorder → ObservationRegistry → Eve
                                                           - Object diff
                                                           - Runtime investigation
                                                           - DOM anchor trace
+                                                          - Storage export enrichment
 ```
 
 ## Verification
 - `npm run typecheck` passes (0 errors) after each ABDT task
 - `npm run build` produces clean output after each ABDT task
-- Final build sizes: content.js ~63.2kb, popup.js ~16.5kb, background.js ~2.4kb
-- 11 source files changed, 835 insertions in ABDT-016 alone
+- Final build sizes: content.js ~76.7kb, popup.js ~16.8kb, background.js ~2.4kb
+- 12 source files changed, 868 insertions in ABDT-017 alone
 
 ## Key Files
 - `src/core/` — Observation Core (7 files)
 - `src/collectors/` — Browser API collectors (5 files)
 - `src/explorers/` — Explorer modules (4 modules)
-- `src/services/investigation/` — Runtime Investigation + Trace (13 files)
+- `src/services/investigation/` — Runtime Investigation + Trace + Report Enrichment (18 files)
 - `src/content.ts` — Content script wiring all explorers, collectors, snapshot service, investigator
 - `src/popup.ts` — Full diagnostics dashboard
 - `popup.html` — Dashboard layout

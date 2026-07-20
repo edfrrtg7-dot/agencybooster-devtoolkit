@@ -124,6 +124,34 @@ interface InvestigationExportResult {
   error?: string;
 }
 
+interface DiffData {
+  hasDiff: boolean;
+  hasChanges: boolean;
+  domAdded: number;
+  domRemoved: number;
+  domModified: number;
+  storageChangedKeys: number;
+  storageChangedProperties: number;
+  runtimeChanged: number;
+  relationshipAdded: number;
+  relationshipRemoved: number;
+  relationshipModified: number;
+  traceChanges: number;
+  noiseIgnored: number;
+  hasBefore: boolean;
+  hasAfter: boolean;
+}
+
+interface DiffRunResult {
+  report?: { summary?: { hasChanges: boolean }; statistics?: Record<string, number> };
+  error?: string;
+}
+
+interface DiffExportResult {
+  text?: string;
+  error?: string;
+}
+
 let cachedData: DiagnosticData | null = null;
 let autoScroll = true;
 let firstObsLoad = true;
@@ -622,6 +650,59 @@ function updateInvestigationStats(data: InvestigationData | null) {
   setText("se-policy", data.exportPolicy ?? "--");
 }
 
+// --- Diff UI ---
+
+function updateDiffStats(data: DiffData | null) {
+  if (!data) return;
+  setText("diff-before", data.hasBefore ? "Yes" : "No");
+  setText("diff-after", data.hasAfter ? "Yes" : "No");
+  setText("diff-changes", data.hasChanges ? "Yes" : "No");
+  setText("diff-dom", String(data.domAdded + data.domRemoved + data.domModified));
+  setText("diff-storage", String(data.storageChangedKeys + data.storageChangedProperties));
+  setText("diff-runtime", String(data.runtimeChanged));
+  setText("diff-relations", String(data.relationshipAdded + data.relationshipRemoved + data.relationshipModified));
+  setText("diff-trace", String(data.traceChanges));
+  setText("diff-noise", String(data.noiseIgnored));
+}
+
+function setupDiffButtons() {
+  document.getElementById("btn-set-before")!.addEventListener("click", async () => {
+    const result = await sendMessage<{ hasBefore?: boolean; error?: string }>({ type: "SET_BEFORE_REPORT" });
+    if (result?.error) { showToast(result.error); return; }
+    showToast(result?.hasBefore ? "Before report set." : "No investigation report available. Run investigation first.");
+  });
+
+  document.getElementById("btn-set-after")!.addEventListener("click", async () => {
+    const result = await sendMessage<{ hasAfter?: boolean; error?: string }>({ type: "SET_AFTER_REPORT" });
+    if (result?.error) { showToast(result.error); return; }
+    showToast(result?.hasAfter ? "After report set." : "No investigation report available. Run investigation first.");
+  });
+
+  document.getElementById("btn-run-diff")!.addEventListener("click", async () => {
+    const result = await sendMessage<DiffRunResult>({ type: "RUN_DIFF" });
+    if (result?.error) { showToast(result.error); return; }
+    if (result?.report?.summary?.hasChanges) {
+      showToast("Diff complete: changes detected.");
+    } else {
+      showToast("Diff complete: no changes detected.");
+    }
+  });
+
+  document.getElementById("btn-export-diff")!.addEventListener("click", async () => {
+    const result = await sendMessage<DiffExportResult>({ type: "EXPORT_DIFF" });
+    if (result?.error) { showToast(result.error); return; }
+    if (result?.text) {
+      try {
+        const ok = await copyText(result.text);
+        showToast(ok ? "Diff report copied." : "Failed to copy — check clipboard permissions");
+      } catch (err) {
+        showToast("Clipboard error — see console");
+        console.error("ABDT: clipboard error during diff export", err);
+      }
+    }
+  });
+}
+
 function setupInvestigationButtons() {
   document.getElementById("btn-run-investigation")!.addEventListener("click", async () => {
     const result = await sendMessage<InvestigationRunResult>({ type: "RUN_INVESTIGATION", profile: "Finance" });
@@ -664,11 +745,14 @@ async function poll() {
   updateSnapshotStats(snapData);
   const invData = await sendMessage<InvestigationData>({ type: "GET_INVESTIGATION_DATA" });
   updateInvestigationStats(invData);
+  const diffData = await sendMessage<DiffData>({ type: "GET_DIFF_DATA" });
+  updateDiffStats(diffData);
 }
 
 setupLiveObsControls();
 setupClipboardButtons();
 setupSnapshotButtons();
 setupInvestigationButtons();
+setupDiffButtons();
 poll();
 setInterval(poll, 2000);
